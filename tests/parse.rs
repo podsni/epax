@@ -214,3 +214,34 @@ fn test_parse_ods() {
         .stdout(predicates::str::contains("sheets  : 1"))
         .stdout(predicates::str::contains("sheet 'Sheet A':"));
 }
+
+#[test]
+fn test_parse_ocr() {
+    let work = TempDir::new().unwrap();
+    let img_path = work.path().join("ocr_test.png");
+
+    // Use ImageMagick (convert) to create a test image containing text.
+    // If ImageMagick is not available, we skip the test gracefully.
+    let status = std::process::Command::new("convert")
+        .args([
+            "-size", "400x80",
+            "xc:white",
+            "-pointsize", "28",
+            "-fill", "black",
+            "-draw", "text 10,50 'TEST OCR VALID 987'",
+            img_path.to_str().unwrap()
+        ])
+        .status();
+
+    if status.map(|s| s.success()).unwrap_or(false) {
+        epax()
+            .arg("parse")
+            .arg("--ocr")
+            .arg(&img_path)
+            .assert()
+            .success()
+            .stdout(predicates::str::contains("TEST OCR VALID 987"));
+    } else {
+        eprintln!("ImageMagick 'convert' not available or failed; skipping OCR integration test");
+    }
+}
