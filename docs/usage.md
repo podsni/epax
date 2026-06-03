@@ -6,14 +6,16 @@
 epax <COMMAND> [OPTIONS] [ARGS]
 ```
 
-| Command      | Alias | Description                                         |
-|--------------|-------|-----------------------------------------------------|
-| `compress`   | `c`   | Create an archive from files and directories        |
-| `extract`    | `x`   | Extract an archive into a directory                 |
-| `list`       | `l`   | List archive contents without extracting            |
-| `squeeze`    |       | Re-encode images (WebP/JPEG/PNG conversion)         |
-| `update`     |       | Update epax to the latest release from GitHub       |
-| `uninstall`  |       | Remove epax from this system                        |
+| Command      | Alias        | Description                                         |
+|--------------|--------------|-----------------------------------------------------|
+| `compress`   | `c`          | Create an archive from files and directories        |
+| `extract`    | `x`, `e`     | Extract an archive into a directory                 |
+| `list`       | `l`, `ls`    | List archive contents without extracting            |
+| `squeeze`    |              | Re-encode images (WebP/JPEG/PNG conversion)         |
+| `parse`      |              | Extract text from documents (PDF/DOCX/XLSX/…)      |
+| `inspect`    | `info`       | Show document metadata (page count, text items)     |
+| `update`     |              | Update epax to the latest release from GitHub       |
+| `uninstall`  |              | Remove epax from this system                        |
 
 ---
 
@@ -414,3 +416,82 @@ epax uninstall --force       # skip confirmation
 | 0    | Success                       |
 | 1    | Error (IO, format, input)     |
 | 2    | Cannot create this format     |
+
+---
+
+## Parse (document text extraction)
+
+See **[docs/parse.md](parse.md)** for the full reference.
+
+```
+epax parse <INPUTS>... [OPTIONS]
+epax inspect <INPUT>
+epax info    <INPUT>        # alias for inspect
+```
+
+### Parse options
+
+| Option                    | Description                                                   |
+|---------------------------|---------------------------------------------------------------|
+| `-o, --output <FILE>`     | Write output to this file instead of stdout                   |
+| `-f, --format <FMT>`      | `text` (default), `md` / `markdown`, or `json`               |
+| `--ocr`                   | Enable Tesseract OCR for scanned / image-only pages           |
+
+### Quick examples
+
+**Extract PDF text to stdout:**
+
+```bash
+epax parse report.pdf
+```
+
+**Save as Markdown with per-page headings:**
+
+```bash
+epax parse report.pdf -f md -o report.md
+```
+
+**Save as JSON:**
+
+```bash
+epax parse report.pdf -f json -o report.json
+```
+
+**Enable OCR for scanned pages:**
+
+```bash
+epax parse scan.pdf --ocr
+```
+
+**Merge multiple documents into one Markdown file:**
+
+```bash
+epax parse a.pdf b.docx c.xlsx -f md -o combined.md
+```
+
+**Inspect metadata (no text output):**
+
+```bash
+epax inspect report.pdf
+# file       : report.pdf
+# pages      : 12
+# text items : 1 847
+# characters : 48 302
+#
+# per-page breakdown:
+#   page    1     142 items  ████████████████████████████
+#   page    2     178 items  ███████████████████████████████████
+```
+
+### Supported document types
+
+| Type  | Extensions              | Notes                               |
+|-------|-------------------------|-------------------------------------|
+| PDF   | `.pdf`                  | Spatial text via PDFium              |
+| Word  | `.docx`                 | Open XML                            |
+| Excel | `.xlsx`                 | Open XML                            |
+| PPT   | `.pptx`                 | Open XML                            |
+| Image | `.jpg` `.png` `.webp`   | Use `--ocr` for Tesseract OCR       |
+
+> **Build note**: `parse` is on by default. Use `--no-default-features` for a
+> pure-Rust build that omits PDFium.

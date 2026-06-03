@@ -105,7 +105,7 @@ pub fn run_interactive(output: Option<&Path>, inputs: &[PathBuf], format: &Optio
     let mut all_inputs: Vec<PathBuf> = inputs.to_vec();
 
     loop {
-        let existing = if all_inputs.is_empty() { "" } else { "" };
+        let existing = if all_inputs.is_empty() { "" } else { " (or Enter to finish)" };
         print!("  add file/dir{existing}: ");
         io::stdout().flush().ok();
         let mut line = String::new();

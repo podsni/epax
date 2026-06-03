@@ -49,6 +49,16 @@ EXAMPLES:
   epax x photos.rar -o ./out                    # explicit output dir
   epax e archive.7z                             # → archive/*
 
+  # Parse documents (PDF, DOCX, XLSX, PPTX, images)
+  epax parse report.pdf                         # → text to stdout
+  epax parse thesis.pdf -o thesis.txt           # → saved to file
+  epax parse scan.pdf --ocr                     # enable OCR for scanned pages
+  epax parse report.pdf --format json           # structured JSON output
+
+  # Inspect document metadata
+  epax inspect report.pdf                       # page count + text items
+  epax info   report.pdf                        # alias
+
   # Squeeze images
   epax squeeze image.jpg                        # → squeezed/image.webp
   epax squeeze photo.png -o optimized/          # → optimized/photo.webp
@@ -62,11 +72,16 @@ SUPPORTED FORMATS:
   zip  7z  gz  bz2  zst  tar      compress + extract
   rar                             extract only (proprietary format)
 
+DOCUMENT PARSING (epax parse / epax inspect):
+  pdf  docx  xlsx  pptx           text extraction via LiteParse
+  jpg  png  webp                  OCR-capable image parsing
+
 MANAGE:
   epax update                   # update to the latest release
   epax uninstall                # uninstall epax from this system
 
 TIP: run `epax help <command>` for full details.";
+
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
@@ -170,7 +185,47 @@ pub enum Command {
         #[arg(long)]
         force: bool,
     },
+
+    /// Extract text from a document — PDF, DOCX, XLSX, PPTX, or image.
+    ///
+    /// Uses LiteParse for local, spatial PDF text extraction — no cloud,
+    /// no external tools required at runtime.
+    ///
+    /// Multiple input files are supported; their text is concatenated.
+    /// Use --ocr to enable Tesseract for scanned / image-heavy pages.
+    #[cfg(feature = "parse")]
+    #[command(after_long_help = PARSE_EXAMPLES)]
+    Parse {
+        /// Document files to parse (PDF, DOCX, XLSX, PPTX, JPG, PNG, …).
+        #[arg(required = true)]
+        inputs: Vec<PathBuf>,
+
+        /// Write output to this file instead of stdout.
+        /// For multiple inputs without -o, output is auto-saved to parsed.<ext>.
+        #[arg(short, long, value_name = "FILE")]
+        output: Option<PathBuf>,
+
+        /// Output format: text (default), md / markdown, or json.
+        #[arg(short, long, default_value = "text", value_name = "FMT")]
+        format: String,
+
+        /// Enable OCR for scanned pages (requires Tesseract on PATH).
+        #[arg(long)]
+        ocr: bool,
+    },
+
+    /// Show document metadata: page count, text-item counts per page.
+    ///
+    /// Reads the document with LiteParse and reports structural information
+    /// without printing the full extracted text.
+    #[cfg(feature = "parse")]
+    #[command(visible_alias = "info", after_long_help = INSPECT_EXAMPLES)]
+    Inspect {
+        /// Document file to inspect.
+        input: PathBuf,
+    },
 }
+
 
 const COMPRESS_EXAMPLES: &str = "\
 EXAMPLES:
@@ -216,3 +271,26 @@ EXAMPLES:
   epax uninstall                # interactive confirmation
   epax uninstall --purge        # also remove config/cache
   epax uninstall --force        # skip confirmation";
+
+#[cfg(feature = "parse")]
+const PARSE_EXAMPLES: &str = "\
+EXAMPLES:
+  epax parse report.pdf                       # text to stdout
+  epax parse thesis.pdf -o thesis.txt         # save to file
+  epax parse scan.pdf --ocr                   # OCR for scanned pages
+  epax parse report.pdf --format json         # JSON output
+  epax parse a.pdf b.docx c.xlsx              # multiple files concatenated
+
+SUPPORTED DOCUMENT TYPES:
+  pdf   — spatial text extraction via PDFium
+  docx  — Microsoft Word
+  xlsx  — Microsoft Excel
+  pptx  — Microsoft PowerPoint
+  jpg, png, webp — image OCR (use --ocr)";
+
+#[cfg(feature = "parse")]
+const INSPECT_EXAMPLES: &str = "\
+EXAMPLES:
+  epax inspect report.pdf     # show page count + text items per page
+  epax info   report.pdf      # same, using alias";
+

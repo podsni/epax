@@ -34,10 +34,12 @@ fn run(cli: Cli) -> Result<()> {
             verbose,
             interactive,
         } => {
-            let actual = if output.is_none() || interactive {
-                ops::compress::run_interactive(output.as_deref(), &inputs, &format, level, verbose)?
+            let actual = if let Some(ref out) = output
+                && !interactive
+            {
+                ops::compress::run(out, &inputs, &format, level, verbose)?
             } else {
-                ops::compress::run(&output.unwrap(), &inputs, &format, level, verbose)?
+                ops::compress::run_interactive(output.as_deref(), &inputs, &format, level, verbose)?
             };
             println!("created {}", actual.display());
         }
@@ -75,6 +77,19 @@ fn run(cli: Cli) -> Result<()> {
             quality,
         } => {
             ops::squeeze::run(&inputs, &output, &format, quality)?;
+        }
+        #[cfg(feature = "parse")]
+        Command::Parse {
+            inputs,
+            output,
+            format,
+            ocr,
+        } => {
+            ops::parse::run(&inputs, output.as_deref(), &format, ocr)?;
+        }
+        #[cfg(feature = "parse")]
+        Command::Inspect { input } => {
+            ops::parse::inspect(&input)?;
         }
         Command::Update { check } => {
             run_update(check)?;

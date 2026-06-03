@@ -1,6 +1,6 @@
 [package]
 name = "epax"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 
 [features]
@@ -9,8 +9,12 @@ edition = "2024"
 # SDK — mingw-w64 lacks headers such as PowrProf.h). Disable with
 # `--no-default-features` to build the all-Rust core (zip/7z/gz/bz2/zst/tar)
 # on toolchains where unrar will not compile.
-default = ["rar"]
+#
+# `parse` adds `epax parse` / `epax inspect` via liteparse (PDFium + optional
+# Tesseract). Disable with `--no-default-features` for a pure-Rust binary.
+default = ["rar", "parse"]
 rar = ["dep:unrar"]
+parse = ["dep:liteparse", "dep:tokio", "dep:quick-xml", "dep:calamine"]
 
 [dependencies]
 bzip2 = "0.6.1"
@@ -20,6 +24,16 @@ sevenz-rust2 = "0.21.0"
 tar = "0.4.46"
 thiserror = "2.0.18"
 unrar = { version = "0.5.8", optional = true }
+# liteparse: local PDF/DOCX/image parsing via PDFium (no Tesseract by default).
+# Users who want OCR can add `features = ["tesseract"]` in their Cargo.toml.
+liteparse = { version = "2", optional = true, default-features = false }
+# Minimal tokio runtime used to drive the async liteparse API synchronously.
+tokio = { version = "1", optional = true, features = ["rt"] }
+# Pure-Rust XML parser — used to extract text from DOCX and PPTX archives
+# without any external tools (no LibreOffice needed).
+quick-xml = { version = "0.40", optional = true }
+# Pure-Rust Excel reader — extracts text/numbers from XLSX without conversion.
+calamine = { version = "0.35", optional = true }
 walkdir = "2.5.0"
 zip = "8.6.0"
 zstd = "0.13.3"
