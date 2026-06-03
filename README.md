@@ -88,8 +88,6 @@ Download a pre-built binary from the
 | Platform | Architecture | Archive |
 |----------|:------------:|---------|
 | Linux    | x64          | `epax-x86_64-unknown-linux-gnu.tar.gz` |
-| macOS    | Apple Silicon (M1/M2/M3) | `epax-aarch64-apple-darwin.tar.gz` |
-| macOS    | Intel        | `epax-x86_64-apple-darwin.tar.gz` |
 | Windows  | x64          | `epax-x86_64-pc-windows-msvc.zip` |
 
 **Linux / macOS manual install:**
