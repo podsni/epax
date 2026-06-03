@@ -42,8 +42,15 @@ fn run(cli: Cli) -> Result<()> {
             format,
             verbose,
         } => {
-            ops::extract::run(&archive, &output, &format, verbose)?;
-            println!("extracted {} -> {}", archive.display(), output.display());
+            let dest = output.unwrap_or_else(|| {
+                let name = archive
+                    .file_name()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "extracted".to_string());
+                std::path::PathBuf::from(format::strip_archive_suffix(&name))
+            });
+            ops::extract::run(&archive, Some(&dest), &format, verbose)?;
+            println!("extracted {} -> {}", archive.display(), dest.display());
         }
         Command::List { archive, format } => {
             let entries = ops::list::run(&archive, &format)?;
@@ -55,6 +62,14 @@ fn run(cli: Cli) -> Result<()> {
                 entries.len(),
                 if entries.len() == 1 { "y" } else { "ies" }
             );
+        }
+        Command::Squeeze {
+            inputs,
+            output,
+            format,
+            quality,
+        } => {
+            ops::squeeze::run(&inputs, &output, &format, quality)?;
         }
         Command::Update { check } => {
             run_update(check)?;
@@ -180,7 +195,6 @@ fn run_uninstall(purge: bool, force: bool) -> Result<()> {
     }
     #[cfg(windows)]
     {
-        // A running .exe can't delete itself; schedule via a batch script.
         let bat = std::env::temp_dir().join("epax_uninstall.bat");
         let bin_str = bin_path.to_string_lossy();
         let script = format!(

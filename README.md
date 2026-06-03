@@ -21,6 +21,13 @@ executable.
 - **Path-traversal protection** — every archive entry is sanitized on extraction
   to prevent zip-slip attacks (`../` escapes, absolute paths, drive prefixes are
   rejected).
+- **Auto-output mode** — `epax compress aku.md` creates `aku.zip` automatically.
+- **Magic-byte detection** — archives without a recognized extension are still
+  identified by their file header on extraction.
+- **Extract-to-folder by default** — `epax extract backup.zip` creates a `backup/`
+  directory and extracts inside it (use `-o` for a custom location).
+- **Image squeeze** — re-encode JPEG, PNG and WebP images to any supported
+  format, with quality control and batch directory processing.
 - **Recursive directory archiving** with relative path preservation.
 - **Unix permission preservation** for `tar` and `zip` (ignored gracefully on
   Windows).
@@ -259,8 +266,11 @@ epax <COMMAND>
 
 Commands:
   compress  Create an archive (format inferred from the output extension)  [alias: c]
-  extract   Extract an archive into a directory                            [alias: x]
+  extract   Extract an archive into a directory                            [aliases: x, e]
   list      List the contents of an archive without extracting             [aliases: l, ls]
+  squeeze   Compress images — convert between WebP, JPEG, and PNG
+  update    Update epax to the latest release from GitHub
+  uninstall Uninstall epax from this system
   help      Print this message or the help of the given subcommand(s)
 ```
 
@@ -298,19 +308,22 @@ epax extract <ARCHIVE> [-o <DIR>]
 
 | Option              | Description                                                                  |
 |---------------------|------------------------------------------------------------------------------|
-| `-o, --output <DIR>`| Destination directory (created if missing; default `.`)                      |
+| `-o, --output <DIR>`| Destination directory (created if missing; **default: folder named after archive**)|
 | `-f, --format`      | Override format detection                                                    |
 | `-v, --verbose`     | Print each entry as it is extracted                                          |
 
 ```bash
-# Extract into the current directory
-epax extract backup.zip
+# Extract into a folder named after the archive (default)
+epax extract backup.zip                 # → backup/*
 
 # Extract into a specific directory
-epax x release.tar.zst -o ./out
+epax x release.tar.zst -o ./out         # 'x' alias
 
-# Extract a RAR archive
-epax extract photos.rar -o ./photos
+# Extract using the 'e' alias
+epax e photos.rar
+
+# Extract to current directory (explicit -o .)
+epax extract archive.7z -o .
 
 # Force format on oddly-named file
 epax extract blob --format zst -o ./out
@@ -339,6 +352,39 @@ epax list release.tar.zst
 | zip    | `0`–`9`  | `6`     |
 
 Out-of-range values are clamped rather than rejected.
+
+### Squeeze (image compression)
+
+```bash
+epax squeeze <INPUTS>... [-o <DIR>] [-f webp|jpeg|png] [-q <N>]
+```
+
+Convert JPEG, PNG and WebP images between formats with quality control.
+Directories are walked recursively; output preserves the relative structure.
+
+| Option              | Description                                                        |
+|---------------------|--------------------------------------------------------------------|
+| `-o, --output <DIR>`| Output directory (default: `./squeezed`)                           |
+| `-f, --format`      | Output format: `webp`, `jpeg`, or `png` (default: `webp`)          |
+| `-q, --quality <N>` | Encoding quality 1–100 (default: `80`; higher = better but larger)  |
+
+```bash
+# Convert to WebP (default format)
+epax squeeze image.jpg                          # → squeezed/image.webp
+
+# Re-encode as JPEG with quality control
+epax squeeze photo.png -f jpeg -q 85            # → squeezed/photo.jpg
+
+# Batch process a whole directory
+epax squeeze photos/ -o optimized/ --format webp # → optimized/*.webp
+
+# Lossless PNG re-encode
+epax squeeze logo.png -f png -q 100             # → squeezed/logo.png
+```
+
+**Note:** WebP output uses lossless encoding (quality flag is accepted but
+currently ignored for WebP). JPEG output respects `--quality`. PNG is always
+lossless.
 
 ---
 

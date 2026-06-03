@@ -158,6 +158,23 @@ pub fn strip_compression_suffix(name: &str) -> String {
     format!("{name}.out")
 }
 
+/// Strip the archive extension from a file name to derive an output directory
+/// name (e.g. `backup.zip` → `backup`, `release.tar.gz` → `release`).
+pub fn strip_archive_suffix(name: &str) -> &str {
+    let lower = name.to_ascii_lowercase();
+    for suf in &[".tar.gz", ".tar.bz2", ".tar.zst", ".tgz", ".tbz2", ".tbz", ".tzst"] {
+        if lower.ends_with(suf) {
+            return &name[..name.len() - suf.len()];
+        }
+    }
+    for suf in &[".zip", ".7z", ".rar", ".tar", ".gz", ".bz2", ".zst"] {
+        if lower.ends_with(suf) {
+            return &name[..name.len() - suf.len()];
+        }
+    }
+    name
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

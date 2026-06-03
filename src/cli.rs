@@ -16,6 +16,7 @@ use clap::{Parser, Subcommand};
 ///             → "aku.zip").
 ///   extract:  format inferred from the archive extension; falls back to
 ///             magic-byte detection for files with unknown/missing extensions.
+///             Extracts into a folder named after the archive by default.
 ///
 /// RAR archives can only be EXTRACTED — the format is proprietary and cannot
 /// be created by any open-source tool.
@@ -30,32 +31,29 @@ pub struct Cli {
 
 const MAIN_EXAMPLES: &str = "\
 EXAMPLES:
-  # Compress — format from output extension
+  # Compress
   epax compress backup.zip ./my-project
-  epax compress release.tar.zst ./bin ./assets README.md
+  epax compress release.tar.zst ./bin ./assets
   epax c docs.7z ./docs                         # 'c' alias
 
-  # Compress — auto output name (no archive extension given)
+  # Compress — auto output name
   epax compress aku.md                          # → aku.zip
   epax c report.pdf                             # → report.zip
-  epax c notes.txt --format 7z                  # → notes.7z (forced format)
+  epax c notes.txt --format 7z                  # → notes.7z
 
-  # Extract — format from extension
-  epax extract backup.zip
-  epax extract release.tar.zst -o ./out
-  epax x photos.rar -o ./photos                 # 'x' or 'e' alias
-  epax e archive.7z -o /tmp/out
+  # Extract — auto creates folder named after archive
+  epax extract backup.zip                       # → backup/* (no -o needed)
+  epax x photos.rar -o ./out                    # explicit output dir
+  epax e archive.7z                             # → archive/*
 
-  # Extract — magic-byte detection (no recognized extension)
-  epax extract myarchive                        # sniffs format from file header
-  epax e blob -o ./unpacked
+  # Squeeze images
+  epax squeeze image.jpg                        # → squeezed/image.webp
+  epax squeeze photo.png -o optimized/          # → optimized/photo.webp
+  epax squeeze *.jpg --quality 90               # batch, high quality
 
-  # Inspect without extracting
-  epax list release.tar.zst                     # aliases: l, ls
-
-  # Single-file stream — no tar container
-  epax compress data.csv.gz data.csv            # → data.csv.gz
-  epax extract data.csv.gz                      # → data.csv
+  # Single-file stream
+  epax compress data.csv.gz data.csv
+  epax extract data.csv.gz                      # → data.csv (bare stream)
 
 SUPPORTED FORMATS:
   zip  7z  gz  bz2  zst  tar      compress + extract
@@ -65,82 +63,46 @@ MANAGE:
   epax update                   # update to the latest release
   epax uninstall                # uninstall epax from this system
 
-TIP: run `epax help <command>` (e.g. `epax help compress`) for full details.";
+TIP: run `epax help <command>` for full details.";
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
     /// Create an archive from files and/or directories.
     ///
-    /// The archive format is chosen from the OUTPUT file extension unless
-    /// `--format` is given. Directories are added recursively, preserving
-    /// their relative paths.
-    ///
     /// AUTO OUTPUT NAME
     ///   If OUTPUT has no recognized archive extension and --format is not
     ///   given, OUTPUT is treated as an additional input and the output name
     ///   is generated automatically: <stem-of-first-input>.zip
-    ///
-    ///   Examples:
-    ///     epax compress aku.md        →  aku.zip  (aku.md as input)
-    ///     epax c notes.txt dir/       →  notes.zip
-    ///     epax c doc.pdf --format 7z  →  doc.7z
-    ///
-    /// STREAM FORMATS (gz / bz2 / zst)
-    ///   Multiple inputs or a directory → packed into a tar container first
-    ///   (.tar.gz, .tar.zst, …). A single file with a bare .gz/.bz2/.zst
-    ///   name is compressed directly, like the standard gzip tool.
     #[command(visible_alias = "c")]
     #[command(after_long_help = COMPRESS_EXAMPLES)]
     Compress {
-        /// Path of the archive to create, OR a file/directory to compress
-        /// (auto-output mode: output name is derived from this path + .zip).
+        /// Output path (or input when auto-output mode kicks in).
         output: PathBuf,
-
-        /// Additional files and/or directories to add.
-        /// Directories are archived recursively.
         #[arg()]
         inputs: Vec<PathBuf>,
-
-        /// Force a specific format instead of detecting from the output
-        /// extension. One of: zip, 7z, gz, bz2, zst, tar.
-        /// In auto-output mode this also changes the output extension.
         #[arg(short, long, value_name = "FMT")]
         format: Option<String>,
-
-        /// Compression level (clamped to format range):
-        /// gzip/zip 0-9 (default 6), bzip2 1-9 (default 6),
-        /// zstd 1-22 (default 3). Ignored by tar and 7z (always LZMA2).
         #[arg(short, long, value_name = "N")]
         level: Option<i32>,
-
-        /// Print the name of each entry as it is added.
         #[arg(short, long)]
         verbose: bool,
     },
 
     /// Extract an archive into a directory.
     ///
-    /// FORMAT DETECTION
-    ///   1. From the --format flag (if given).
-    ///   2. From the archive file extension (.zip, .tar.gz, .rar, …).
-    ///   3. From the file's magic bytes — works even when the extension is
-    ///      missing or wrong (e.g. a zip renamed to .dat is still extracted
-    ///      correctly).
-    ///
-    /// Entry paths are sanitized to prevent writing outside the output
-    /// directory (protection against path-traversal / zip-slip attacks).
+    /// By default, extracts into a folder named after the archive (without its
+    /// extension). Use -o to extract to a specific location.
     #[command(visible_aliases = ["x", "e"])]
     #[command(after_long_help = EXTRACT_EXAMPLES)]
     Extract {
         /// Path of the archive to extract.
         archive: PathBuf,
 
-        /// Directory to extract into; created if it does not exist.
-        #[arg(short, long, default_value = ".", value_name = "DIR")]
-        output: PathBuf,
+        /// Directory to extract into. Default: a folder named after the archive.
+        #[arg(short, long, value_name = "DIR")]
+        output: Option<PathBuf>,
 
-        /// Force a format instead of detecting it from the archive extension.
-        /// One of: zip, 7z, gz, bz2, zst, tar, rar.
+        /// Force a format instead of detecting it.
         #[arg(short, long, value_name = "FMT")]
         format: Option<String>,
 
@@ -150,27 +112,38 @@ pub enum Command {
     },
 
     /// List the contents of an archive without extracting it.
-    ///
-    /// Prints one line per entry as `SIZE  NAME`, followed by a count. Sizes
-    /// are uncompressed bytes where the format records them.
-    /// Format detection uses the same extension + magic fallback as extract.
     #[command(visible_aliases = ["l", "ls"])]
     List {
-        /// Path of the archive to inspect.
         archive: PathBuf,
-
-        /// Force a format instead of detecting it from the archive extension.
-        /// One of: zip, 7z, gz, bz2, zst, tar, rar.
         #[arg(short, long, value_name = "FMT")]
         format: Option<String>,
     },
 
+    /// Compress images — convert to WebP (default), JPEG, or PNG.
+    ///
+    /// Reads JPEG, PNG, and WebP images and re-encodes them at the specified
+    /// quality. Output goes into a folder named 'squeezed' (or any -o dir).
+    /// Directories are walked recursively.
+    #[command(after_long_help = SQUEEZE_EXAMPLES)]
+    Squeeze {
+        /// Image files or directories to process.
+        #[arg(required = true)]
+        inputs: Vec<PathBuf>,
+
+        /// Output directory (default: ./squeezed).
+        #[arg(short, long, default_value = "squeezed", value_name = "DIR")]
+        output: PathBuf,
+
+        /// Output image format: webp, jpeg, png (default: webp).
+        #[arg(short, long, default_value = "webp", value_name = "FMT")]
+        format: String,
+
+        /// Encoding quality 1-100 (default: 80). Higher = better/larger.
+        #[arg(short, long, default_value_t = 80, value_name = "N")]
+        quality: u8,
+    },
+
     /// Update epax to the latest release from GitHub.
-    ///
-    /// Downloads the latest binary for the current platform, replaces the
-    /// running executable in-place, and prints the new version.
-    ///
-    /// Requires an internet connection. Uses the GitHub Releases API.
     #[command(after_long_help = UPDATE_EXAMPLES)]
     Update {
         /// Only check whether a newer version is available; do not install.
@@ -179,16 +152,10 @@ pub enum Command {
     },
 
     /// Uninstall epax from this system.
-    ///
-    /// Removes the epax binary. Use --purge to also delete configuration and
-    /// cache files. Asks for confirmation unless --force is given.
     #[command(after_long_help = UNINSTALL_EXAMPLES)]
     Uninstall {
-        /// Also remove configuration and cache directories.
         #[arg(long)]
         purge: bool,
-
-        /// Skip the confirmation prompt.
         #[arg(long)]
         force: bool,
     },
@@ -198,46 +165,38 @@ const COMPRESS_EXAMPLES: &str = "\
 EXAMPLES:
   epax compress backup.zip ./my-project
   epax compress site.tar.gz ./public index.html
-  epax compress release.tar.zst ./bin ./assets -l 19   # high zstd level
-  epax compress logs.7z ./logs -v                       # verbose
-
-  # Auto-output: no recognized archive extension → stem + .zip
-  epax compress aku.md                   # aku.md → aku.zip
-  epax c report.pdf ./assets             # report.zip (report.pdf + assets/)
-  epax c notes.txt --format 7z           # notes.7z
+  epax c release.tar.zst ./bin -l 19
+  epax compress notes.txt --format 7z          # auto-output: notes.7z
 
   # Single-file bare stream
-  epax compress data.csv.gz data.csv     # raw gzip, no tar
-
-NOTES:
-  * Output extension picks the format: .zip .7z .tar .tar.gz/.tgz
-    .tar.bz2/.tbz2 .tar.zst/.tzst, or bare .gz/.bz2/.zst for one file.
-  * RAR output is always rejected (exit code 2).";
+  epax compress data.csv.gz data.csv";
 
 const EXTRACT_EXAMPLES: &str = "\
 EXAMPLES:
-  epax extract backup.zip                  # into current directory
-  epax x release.tar.zst -o ./out          # 'x' alias
-  epax e photos.rar -o ./photos            # 'e' alias
-  epax extract archive.7z -o /tmp/out -v   # verbose
-
-  # Magic-byte detection — extension does not matter
-  epax extract myarchive                   # sniffs format from file header
-  epax e renamed_zip.dat -o ./unpacked
+  epax extract backup.zip                      # → backup/ folder
+  epax x photos.rar -o ./photos                # explicit output dir
+  epax e archive.7z                            # → archive/ folder
 
 NOTES:
-  * Detection order: --format flag → file extension → magic bytes.
-  * Use --format to force a specific format.
-    e.g. epax extract blob --format zst -o ./out";
+  * Default output is a folder named after the archive (extension stripped).
+  * Use -o <DIR> to extract anywhere.
+  * Detection: --format flag → extension → magic bytes.";
+
+const SQUEEZE_EXAMPLES: &str = "\
+EXAMPLES:
+  epax squeeze image.jpg                       # → squeezed/image.webp
+  epax squeeze photo.png -o optimized/         # → optimized/photo.webp
+  epax squeeze *.jpg --quality 90              # batch, high quality
+  epax squeeze photos/ --format jpeg           # re-encode folder as JPEG
+  epax squeeze logo.png --format png --quality 100  # lossless PNG";
 
 const UPDATE_EXAMPLES: &str = "\
 EXAMPLES:
-  epax update            # update to latest
-  epax update --check    # check only, do not install";
+  epax update              # update to latest release
+  epax update --check      # check only, do not install";
 
 const UNINSTALL_EXAMPLES: &str = "\
 EXAMPLES:
-  epax uninstall               # interactive confirmation
-  epax uninstall --purge       # also remove config/cache files
-  epax uninstall --force       # skip confirmation
-  epax uninstall --force --purge";
+  epax uninstall                # interactive confirmation
+  epax uninstall --purge        # also remove config/cache
+  epax uninstall --force        # skip confirmation";

@@ -1,6 +1,6 @@
 [package]
 name = "epax"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 
 [features]
@@ -23,6 +23,7 @@ unrar = { version = "0.5.8", optional = true }
 walkdir = "2.5.0"
 zip = "8.6.0"
 zstd = "0.13.3"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 
 [dev-dependencies]
 assert_cmd = "2.2.2"
