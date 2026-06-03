@@ -1,3 +1,4 @@
+use std::io::{self, Read};
 use std::path::Path;
 
 use crate::error::{EpaxError, Result};
@@ -83,6 +84,35 @@ impl Format {
         };
         Ok(f)
     }
+
+    /// Sniff the first few bytes of a file and return the format, if recognized.
+    /// Returns None when the magic bytes don't match any known format.
+    pub fn detect_from_magic(path: &Path) -> io::Result<Option<Format>> {
+        let mut file = std::fs::File::open(path)?;
+        let mut buf = [0u8; 8];
+        let n = file.read(&mut buf)?;
+        let b = &buf[..n];
+
+        let fmt = if b.starts_with(&[0x50, 0x4B, 0x03, 0x04])
+            || b.starts_with(&[0x50, 0x4B, 0x05, 0x06])
+            || b.starts_with(&[0x50, 0x4B, 0x07, 0x08])
+        {
+            Some(Format::Zip)
+        } else if b.starts_with(b"7z\xbc\xaf\x27\x1c") {
+            Some(Format::SevenZ)
+        } else if b.starts_with(&[0x1f, 0x8b]) {
+            Some(Format::Gz)
+        } else if b.starts_with(&[0x42, 0x5a, 0x68]) {
+            Some(Format::Bz2)
+        } else if b.starts_with(&[0x28, 0xb5, 0x2f, 0xfd]) {
+            Some(Format::Zst)
+        } else if b.len() >= 5 && &b[..5] == b"Rar!!" {
+            Some(Format::Rar)
+        } else {
+            None
+        };
+        Ok(fmt)
+    }
 }
 
 /// Does this file name imply a tar container around the compressed stream?
@@ -125,7 +155,6 @@ pub fn strip_compression_suffix(name: &str) -> String {
             return name[..name.len() - suffix.len()].to_string();
         }
     }
-    // Nothing to strip; fall back to a generic name to avoid clobbering.
     format!("{name}.out")
 }
 

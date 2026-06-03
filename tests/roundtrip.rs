@@ -206,18 +206,117 @@ fn rar_compress_is_rejected() {
         .stderr(predicates::str::contains("not supported"));
 }
 
-/// An unknown extension is a clear error.
+/// With an unrecognized extension and an explicit second input the first arg
+/// is treated as an extra input (auto-output mode → stem + .zip), so the error
+/// is about the non-existent path, not an unknown format.
 #[test]
-fn unknown_extension_errors() {
+fn unknown_extension_becomes_auto_output_mode() {
     let work = TempDir::new().unwrap();
     let file = work.path().join("a.txt");
     fs::write(&file, b"x").unwrap();
 
+    // "out.weird" has no archive extension → treated as input, fails because it
+    // does not exist on disk.
     epax()
         .arg("compress")
         .arg(work.path().join("out.weird"))
         .arg(&file)
         .assert()
         .failure()
-        .stderr(predicates::str::contains("could not determine format"));
+        .stderr(predicates::str::contains("does not exist"));
+}
+
+/// `epax compress aku.md` — no archive extension on the first arg → auto-generates
+/// `aku.zip` in the same directory and treats the original arg as the input.
+#[test]
+fn compress_auto_output_zip() {
+    let work = TempDir::new().unwrap();
+    let file = work.path().join("notes.md");
+    fs::write(&file, b"auto output test").unwrap();
+
+    // Run from work dir so relative output lands there.
+    epax()
+        .current_dir(work.path())
+        .arg("compress")
+        .arg("notes.md")
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("notes.zip"));
+
+    assert!(work.path().join("notes.zip").exists());
+}
+
+/// `epax compress doc.pdf --format 7z` → auto-output uses the forced format.
+#[test]
+fn compress_auto_output_with_format_override() {
+    let work = TempDir::new().unwrap();
+    let file = work.path().join("report.pdf");
+    fs::write(&file, b"pdf content").unwrap();
+
+    epax()
+        .current_dir(work.path())
+        .args(["compress", "report.pdf", "--format", "7z"])
+        .assert()
+        .success();
+
+    // With --format given, the auto-output stem is still "report" but the
+    // format is 7z — the output written is report.7z.
+    // (The exact output name depends on the auto-output logic; we just verify
+    //  that a 7z archive was created somewhere in the work dir.)
+    let found = fs::read_dir(work.path())
+        .unwrap()
+        .any(|e| e.unwrap().file_name().to_string_lossy().ends_with(".7z"));
+    assert!(found, "expected a .7z file in work dir");
+}
+
+/// Extract a zip renamed to `.dat` — magic-byte detection should identify it.
+#[test]
+fn extract_magic_detection_zip_as_dat() {
+    let work = TempDir::new().unwrap();
+    let src = work.path().join("src");
+    make_source(&src);
+
+    // Create a real zip but store it with an unrecognized extension.
+    let zip_path = work.path().join("bundle.zip");
+    epax()
+        .arg("compress")
+        .arg(&zip_path)
+        .arg(&src)
+        .assert()
+        .success();
+
+    let dat_path = work.path().join("bundle.dat");
+    fs::rename(&zip_path, &dat_path).unwrap();
+
+    let out = work.path().join("out");
+    epax()
+        .args(["extract", "-o"])
+        .arg(&out)
+        .arg(&dat_path)
+        .assert()
+        .success();
+
+    assert!(out.join("src/hello.txt").exists());
+}
+
+/// `epax e` alias for extract works.
+#[test]
+fn alias_e_for_extract() {
+    let work = TempDir::new().unwrap();
+    let src = work.path().join("src");
+    make_source(&src);
+
+    let archive = work.path().join("out.zip");
+    epax().arg("compress").arg(&archive).arg(&src).assert().success();
+
+    let out = work.path().join("out");
+    epax()
+        .arg("e")
+        .arg(&archive)
+        .args(["-o"])
+        .arg(&out)
+        .assert()
+        .success();
+
+    assert!(out.join("src/hello.txt").exists());
 }
