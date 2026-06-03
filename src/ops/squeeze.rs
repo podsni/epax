@@ -45,8 +45,20 @@ fn with_format_ext(name: &str, fmt: image::ImageFormat) -> String {
     format!("{}.{}", stem, format_ext(fmt))
 }
 
-/// Re-encode a single image file.
-fn process_image(src: &Path, dst: &Path, fmt: image::ImageFormat, quality: u8) -> Result<()> {
+/// Format a file size in human-readable form.
+fn human_size(bytes: u64) -> String {
+    const UNITS: &[&str] = &["B", "KB", "MB", "GB"];
+    let mut size = bytes as f64;
+    let mut unit = 0;
+    while size > 1024.0 && unit < UNITS.len() - 1 {
+        size /= 1024.0;
+        unit += 1;
+    }
+    format!("{:.1} {}", size, UNITS[unit])
+}
+
+/// Re-encode a single image file. Returns the compressed file size in bytes.
+fn process_image(src: &Path, dst: &Path, fmt: image::ImageFormat, quality: u8) -> Result<u64> {
     let img = image::open(src)
         .map_err(|e: image::ImageError| EpaxError::Backend(e.to_string()))?;
 
@@ -76,7 +88,10 @@ fn process_image(src: &Path, dst: &Path, fmt: image::ImageFormat, quality: u8) -
         }
     }
 
-    Ok(())
+    let compressed_size = std::fs::metadata(dst)
+        .map_err(EpaxError::Io)?
+        .len();
+    Ok(compressed_size)
 }
 
 /// Run the squeeze command.
@@ -85,16 +100,23 @@ pub fn run(inputs: &[PathBuf], output: &Path, format: &str, quality: u8) -> Resu
 
     std::fs::create_dir_all(output).map_err(EpaxError::Io)?;
 
-    let mut processed = 0u32;
+    struct Result {
+        name: String,
+        original: u64,
+        compressed: u64,
+    }
+    let mut results: Vec<Result> = Vec::new();
 
     for input in inputs {
         if input.is_dir() {
-            // Walk the directory, preserving relative paths.
             for entry in walkdir::WalkDir::new(input)
                 .into_iter()
                 .filter_map(|e| e.ok())
             {
                 if entry.file_type().is_file() && is_supported_image(entry.path()) {
+                    let original_size = std::fs::metadata(entry.path())
+                        .map_err(EpaxError::Io)?
+                        .len();
                     let relative = entry
                         .path()
                         .strip_prefix(input)
@@ -111,11 +133,14 @@ pub fn run(inputs: &[PathBuf], output: &Path, format: &str, quality: u8) -> Resu
                     let new_name = with_format_ext(&old_name, target_fmt);
                     let dest = dest_dir.join(&new_name);
 
-                    process_image(entry.path(), &dest, target_fmt, quality)?;
-                    processed += 1;
+                    let compressed_size = process_image(entry.path(), &dest, target_fmt, quality)?;
+                    results.push(Result { name: old_name, original: original_size, compressed: compressed_size });
                 }
             }
         } else if is_supported_image(input) {
+            let original_size = std::fs::metadata(input)
+                .map_err(EpaxError::Io)?
+                .len();
             let old_name = input
                 .file_name()
                 .map(|s| s.to_string_lossy().into_owned())
@@ -123,25 +148,57 @@ pub fn run(inputs: &[PathBuf], output: &Path, format: &str, quality: u8) -> Resu
             let new_name = with_format_ext(&old_name, target_fmt);
             let dest = output.join(&new_name);
 
-            process_image(input, &dest, target_fmt, quality)?;
-            processed += 1;
+            let compressed_size = process_image(input, &dest, target_fmt, quality)?;
+            results.push(Result { name: old_name, original: original_size, compressed: compressed_size });
         } else {
             eprintln!("warning: skipping unsupported file: {}", input.display());
         }
     }
 
-    if processed == 0 {
+    if results.is_empty() {
         return Err(EpaxError::Backend(
             "no supported image files found (try .jpg, .png, .webp)".to_string(),
         ));
     }
 
+    // Summary with size comparison
+    println!();
+    for r in &results {
+        let saved = r.original.saturating_sub(r.compressed);
+        let pct = if r.original > 0 {
+            (saved as f64 / r.original as f64 * 100.0) as i32
+        } else {
+            0
+        };
+        let (arrow, note) = if saved > 0 { ("↓", format!("{}% smaller", pct)) } else { ("=", "no change".to_string()) };
+        println!(
+            "  {}  {}  ({} → {}, {})",
+            arrow,
+            r.name,
+            human_size(r.original),
+            human_size(r.compressed),
+            note,
+        );
+    }
+
+    let total_orig: u64 = results.iter().map(|r| r.original).sum();
+    let total_comp: u64 = results.iter().map(|r| r.compressed).sum();
+    let total_saved = total_orig.saturating_sub(total_comp);
+    let total_pct = if total_orig > 0 {
+        (total_saved as f64 / total_orig as f64 * 100.0) as i32
+    } else {
+        0
+    };
+
     println!(
-        "{processed} image{} squeezed -> {}/*.{}",
-        if processed == 1 { "" } else { "s" },
-        output.display(),
-        format_ext(target_fmt),
+        "  ──\n  {} image{}: {} → {}  ({}% smaller)",
+        results.len(),
+        if results.len() == 1 { "" } else { "s" },
+        human_size(total_orig),
+        human_size(total_comp),
+        total_pct,
     );
+    println!("  output: {}/*.{}", output.display(), format_ext(target_fmt));
 
     Ok(())
 }

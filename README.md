@@ -431,6 +431,16 @@ epax squeeze photos/ -o optimized/ --format webp # → optimized/*.webp
 epax squeeze logo.png -f png -q 100             # → squeezed/logo.png
 ```
 
+After processing, epax shows a size comparison for each image and a total:
+
+```
+  ↓  photo.png        (1.2 MB → 245.6 KB, 80% smaller)
+  ↓  screenshot.jpg   (3.1 MB → 856.3 KB, 73% smaller)
+  ──
+  2 images: 4.3 MB → 1.1 MB  (75% smaller)
+  output: squeezed/*.webp
+```
+
 **Note:** WebP output uses lossless encoding (quality flag is accepted but
 currently ignored for WebP). JPEG output respects `--quality`. PNG is always
 lossless.
