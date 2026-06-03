@@ -1,17 +1,17 @@
 name: release
 
-# Build epax for Linux, macOS and Windows and attach the binaries to a
-# GitHub Release. Triggered by pushing a version tag (e.g. v0.1.0); can also
-# be run manually with a tag name via the Actions tab.
+# Triggered by a version tag push (e.g. v0.1.0) OR manually from the
+# Actions tab where you can pick the exact version to publish.
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch:
     inputs:
-      tag:
-        description: "Tag to build and release (e.g. v0.1.0)"
+      version:
+        description: "Version tag to build and release (e.g. v0.2.0)"
         required: true
+        default: "v0.1.0"
 
 permissions:
   contents: write
@@ -35,45 +35,52 @@ jobs:
             target: x86_64-apple-darwin
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+
     steps:
       - uses: actions/checkout@v4
+        with:
+          # When triggered via workflow_dispatch, check out the given tag.
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || github.ref }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Cache cargo
+      - name: Cache cargo registry/build
         uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
 
-      - name: Build release
+      - name: Build release binary
         run: cargo build --release --locked --target ${{ matrix.target }}
 
+      # ── Package ───────────────────────────────────────────────────────────
       - name: Package (Unix)
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          bin="target/${{ matrix.target }}/release/epax"
-          name="epax-${{ matrix.target }}"
-          mkdir -p "dist/$name"
-          cp "$bin" "dist/$name/"
-          cp README.md "dist/$name/"
-          tar -C dist -czf "dist/$name.tar.gz" "$name"
-          echo "ASSET=dist/$name.tar.gz" >> "$GITHUB_ENV"
+          TARGET="${{ matrix.target }}"
+          ASSET_NAME="epax-${TARGET}"
+          mkdir -p "dist/${ASSET_NAME}"
+          cp "target/${TARGET}/release/epax" "dist/${ASSET_NAME}/"
+          cp README.md "dist/${ASSET_NAME}/"
+          tar -C dist -czf "dist/${ASSET_NAME}.tar.gz" "${ASSET_NAME}"
+          echo "ASSET=dist/${ASSET_NAME}.tar.gz" >> "$GITHUB_ENV"
+          echo "ASSET_NAME=${ASSET_NAME}.tar.gz"  >> "$GITHUB_ENV"
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          bin="target/${{ matrix.target }}/release/epax.exe"
-          name="epax-${{ matrix.target }}"
-          mkdir -p "dist/$name"
-          cp "$bin" "dist/$name/"
-          cp README.md "dist/$name/"
-          7z a "dist/$name.zip" "./dist/$name"
-          echo "ASSET=dist/$name.zip" >> "$GITHUB_ENV"
+          TARGET="${{ matrix.target }}"
+          ASSET_NAME="epax-${TARGET}"
+          mkdir -p "dist/${ASSET_NAME}"
+          cp "target/${TARGET}/release/epax.exe" "dist/${ASSET_NAME}/"
+          cp README.md "dist/${ASSET_NAME}/"
+          7z a "dist/${ASSET_NAME}.zip" "./dist/${ASSET_NAME}"
+          echo "ASSET=dist/${ASSET_NAME}.zip"     >> "$GITHUB_ENV"
+          echo "ASSET_NAME=${ASSET_NAME}.zip"      >> "$GITHUB_ENV"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -88,32 +95,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download all artifacts
+      - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Resolve tag
+      - name: Resolve tag name
         id: tag
         shell: bash
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+            echo "tag=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
           else
             echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Create or update release and upload assets
+      - name: Create / update GitHub Release and upload assets
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          tag="${{ steps.tag.outputs.tag }}"
-          assets=$(find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' \))
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" $assets --clobber
+          TAG="${{ steps.tag.outputs.tag }}"
+          # Collect every archive from the artifact directories
+          ASSETS=$(find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' \) | tr '\n' ' ')
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # Release already exists — upload / overwrite assets only
+            gh release upload "$TAG" $ASSETS --clobber
           else
-            gh release create "$tag" $assets \
-              --title "epax $tag" \
+            gh release create "$TAG" $ASSETS \
+              --title "epax $TAG" \
               --generate-notes
           fi

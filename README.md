@@ -27,15 +27,15 @@ executable.
 
 ## Format support matrix
 
-| Format | Extensions                       | Compress | Extract | Backend             |
-|--------|----------------------------------|:--------:|:-------:|---------------------|
-| zip    | `.zip`                           |    ✓     |    ✓    | `zip` (Deflate)     |
-| 7z     | `.7z`                            |    ✓     |    ✓    | `sevenz-rust2` (LZMA2) |
-| gzip   | `.gz` `.tgz` `.tar.gz`           |    ✓     |    ✓    | `flate2`            |
-| bzip2  | `.bz2` `.tbz2` `.tbz` `.tar.bz2` |    ✓     |    ✓    | `bzip2`             |
-| zstd   | `.zst` `.tzst` `.tar.zst`        |    ✓     |    ✓    | `zstd`              |
-| tar    | `.tar`                           |    ✓     |    ✓    | `tar`               |
-| rar    | `.rar`                           |    ✗     |    ✓    | `unrar`             |
+| Format | Extensions                        | Compress | Extract | Backend                |
+|--------|-----------------------------------|:--------:|:-------:|------------------------|
+| zip    | `.zip`                            |    ✓     |    ✓    | `zip` (Deflate)        |
+| 7z     | `.7z`                             |    ✓     |    ✓    | `sevenz-rust2` (LZMA2) |
+| gzip   | `.gz` `.tgz` `.tar.gz`            |    ✓     |    ✓    | `flate2`               |
+| bzip2  | `.bz2` `.tbz2` `.tbz` `.tar.bz2`  |    ✓     |    ✓    | `bzip2`                |
+| zstd   | `.zst` `.tzst` `.tar.zst`         |    ✓     |    ✓    | `zstd`                 |
+| tar    | `.tar`                            |    ✓     |    ✓    | `tar`                  |
+| rar    | `.rar`                            |    ✗     |    ✓    | `unrar`                |
 
 > **Why can't epax create RAR archives?**
 > RAR is a proprietary format. Its compression algorithm is closed and owned by
@@ -48,17 +48,156 @@ executable.
 
 ## Installation
 
-### From source
+### Quick Install (Recommended)
+
+**Linux / macOS:**
+
+```bash
+curl -sSL https://raw.githubusercontent.com/podsni/epax/main/scripts/install.sh | bash
+```
+
+Install a specific version:
+
+```bash
+VERSION=v0.1.0 curl -sSL https://raw.githubusercontent.com/podsni/epax/main/scripts/install.sh | bash
+```
+
+**Windows (PowerShell):**
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/podsni/epax/main/scripts/install.ps1 | iex
+```
+
+Install a specific version:
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/podsni/epax/main/scripts/install.ps1 `
+  -OutFile install.ps1; .\install.ps1 -Version v0.1.0
+```
+
+By default the script installs to `/usr/local/bin` (Linux/macOS) or
+`%LOCALAPPDATA%\epax` (Windows) and adds it to your `PATH` automatically.
+
+---
+
+### Manual Download
+
+Download a pre-built binary from the
+[**Releases page**](https://github.com/podsni/epax/releases).
+
+| Platform | Architecture | Archive |
+|----------|:------------:|---------|
+| Linux    | x64          | `epax-x86_64-unknown-linux-gnu.tar.gz` |
+| macOS    | Apple Silicon (M1/M2/M3) | `epax-aarch64-apple-darwin.tar.gz` |
+| macOS    | Intel        | `epax-x86_64-apple-darwin.tar.gz` |
+| Windows  | x64          | `epax-x86_64-pc-windows-msvc.zip` |
+
+**Linux / macOS manual install:**
+
+```bash
+# Download (replace <VERSION> and <TARGET> with your values)
+curl -LO https://github.com/podsni/epax/releases/latest/download/epax-x86_64-unknown-linux-gnu.tar.gz
+
+# Extract
+tar -xzf epax-x86_64-unknown-linux-gnu.tar.gz
+
+# Install
+sudo mv epax-x86_64-unknown-linux-gnu/epax /usr/local/bin/epax
+chmod +x /usr/local/bin/epax
+```
+
+**Windows manual install:**
+
+1. Download `epax-x86_64-pc-windows-msvc.zip` from the Releases page.
+2. Extract the `.zip` to a folder, e.g. `C:\Program Files\epax`.
+3. Add that folder to your `PATH` environment variable
+   (System Properties → Environment Variables → Path → New).
+4. Open a new terminal and run `epax --help`.
+
+---
+
+### Verify Installation
+
+```bash
+epax --version
+epax --help
+```
+
+---
+
+### Update
+
+To update to the latest release, re-run the same install script — it overwrites
+the existing binary:
+
+```bash
+# Linux / macOS
+curl -sSL https://raw.githubusercontent.com/podsni/epax/main/scripts/install.sh | bash
+
+# Windows PowerShell
+iwr -useb https://raw.githubusercontent.com/podsni/epax/main/scripts/install.ps1 | iex
+```
+
+---
+
+### Uninstall
+
+**Using the uninstall script (recommended):**
+
+Linux / macOS:
+
+```bash
+# Interactive (asks for confirmation)
+curl -sSL https://raw.githubusercontent.com/podsni/epax/main/scripts/uninstall.sh | bash
+
+# Remove config files too
+curl -sSL https://raw.githubusercontent.com/podsni/epax/main/scripts/uninstall.sh | bash -s -- --purge
+
+# No confirmation prompt
+curl -sSL https://raw.githubusercontent.com/podsni/epax/main/scripts/uninstall.sh | bash -s -- --force
+```
+
+Windows (PowerShell):
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/podsni/epax/main/scripts/uninstall.ps1 | iex
+
+# Remove config files too
+iwr -useb https://raw.githubusercontent.com/podsni/epax/main/scripts/uninstall.ps1 `
+  -OutFile uninstall.ps1; .\uninstall.ps1 -Purge
+```
+
+**Manual uninstall:**
+
+Linux / macOS:
+
+```bash
+sudo rm /usr/local/bin/epax
+# Optionally remove config:
+rm -rf ~/.config/epax ~/.local/share/epax
+```
+
+Windows:
+
+```
+1. Delete  %LOCALAPPDATA%\epax\epax.exe
+2. Remove  %LOCALAPPDATA%\epax  from your PATH environment variable
+3. Optionally delete  %APPDATA%\epax  for config files
+```
+
+---
+
+### Build from source
 
 Requires a [Rust toolchain](https://rustup.rs/) (1.85+ / edition 2024) and a C
 compiler (used at build time to compile the vendored `zstd` and `unrar`
 sources — `gcc`/`clang` on Unix, MSVC build tools on Windows).
 
 ```bash
-git clone git@github.com:podsni/epax.git
+git clone https://github.com/podsni/epax.git
 cd epax
 cargo build --release
-# binary at target/release/epax
+# binary at target/release/epax  (or target/release/epax.exe on Windows)
 ```
 
 Install into your Cargo bin directory:
@@ -67,7 +206,7 @@ Install into your Cargo bin directory:
 cargo install --path .
 ```
 
-### Optional: build without RAR
+**Build without RAR (pure-Rust, compiles everywhere):**
 
 RAR extraction is enabled by default and links the vendored C++ `unrar`
 sources. Those require a C++ toolchain and, on Windows, the **MSVC** SDK
@@ -80,12 +219,38 @@ cross-compiling with a toolchain that cannot build it — build the all-Rust cor
 cargo build --release --no-default-features
 ```
 
-### Windows
+**Windows notes:**
 
 - **Native (recommended):** build on Windows with the MSVC toolchain
   (`x86_64-pc-windows-msvc`) — the full feature set, including RAR, compiles.
 - **Cross-compiling from Linux with mingw (`x86_64-pc-windows-gnu`):** build the
   core with `--no-default-features` (the RAR C++ sources need the MSVC SDK).
+
+---
+
+## Releases
+
+Pre-built binaries are published automatically on every version tag push via
+GitHub Actions. You can also trigger a release manually:
+
+1. Go to the [**Actions tab**](https://github.com/podsni/epax/actions/workflows/release.yml).
+2. Click **"Run workflow"**.
+3. Enter the version tag (e.g. `v0.2.0`) — this tag **must already exist** in
+   the repository.
+4. Click **"Run workflow"** to start the build.
+
+The workflow builds Linux x64, macOS arm64, macOS x64, and Windows x64, then
+creates (or updates) the GitHub Release for that tag with all four archives
+attached.
+
+**Creating a new release tag:**
+
+```bash
+# Bump version in Cargo.toml first, then:
+git tag v0.2.0
+git push origin v0.2.0
+# The release workflow triggers automatically.
+```
 
 ---
 
@@ -107,11 +272,11 @@ Commands:
 epax compress <OUTPUT> <INPUTS>...
 ```
 
-| Option              | Description                                              |
-|---------------------|----------------------------------------------------------|
-| `-f, --format`      | Override format detection (`zip`, `7z`, `gz`, `bz2`, `zst`, `tar`) |
-| `-l, --level <N>`   | Compression level (clamped to each format's valid range) |
-| `-v, --verbose`     | Print each entry as it is added                          |
+| Option              | Description                                                                  |
+|---------------------|------------------------------------------------------------------------------|
+| `-f, --format`      | Override format detection (`zip`, `7z`, `gz`, `bz2`, `zst`, `tar`)          |
+| `-l, --level <N>`   | Compression level (clamped to each format's valid range)                     |
+| `-v, --verbose`     | Print each entry as it is added                                              |
 
 ```bash
 # Zip up a directory
@@ -133,11 +298,11 @@ epax compress data.csv.gz data.csv
 epax extract <ARCHIVE> [-o <DIR>]
 ```
 
-| Option              | Description                                              |
-|---------------------|----------------------------------------------------------|
-| `-o, --output <DIR>`| Destination directory (created if missing; default `.`)  |
-| `-f, --format`      | Override format detection                                |
-| `-v, --verbose`     | Print each entry as it is extracted                      |
+| Option              | Description                                                                  |
+|---------------------|------------------------------------------------------------------------------|
+| `-o, --output <DIR>`| Destination directory (created if missing; default `.`)                      |
+| `-f, --format`      | Override format detection                                                    |
+| `-v, --verbose`     | Print each entry as it is extracted                                          |
 
 ```bash
 # Extract into the current directory
@@ -148,6 +313,9 @@ epax x release.tar.zst -o ./out
 
 # Extract a RAR archive
 epax extract photos.rar -o ./photos
+
+# Force format on oddly-named file
+epax extract blob --format zst -o ./out
 ```
 
 ### List
@@ -235,9 +403,17 @@ src/
   backends/          per-format implementations
     zip.rs  sevenz.rs  streamc.rs  tar.rs  rar.rs
   util/path.rs       sanitize_entry_path (zip-slip guard)
+build.rs             links advapi32 on Windows MSVC when the rar feature is on
 tests/
   roundtrip.rs       end-to-end integration tests
   fixtures/          sample.rar extraction fixture
+scripts/
+  install.sh         quick-install for Linux / macOS
+  install.ps1        quick-install for Windows PowerShell
+  uninstall.sh       uninstall for Linux / macOS
+  uninstall.ps1      uninstall for Windows PowerShell
+.github/workflows/
+  release.yml        builds all targets and publishes GitHub Release on tag push
 ```
 
 ---
