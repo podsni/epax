@@ -14,7 +14,7 @@ edition = "2024"
 # Tesseract). Disable with `--no-default-features` for a pure-Rust binary.
 default = ["rar", "parse"]
 rar = ["dep:unrar"]
-parse = ["dep:liteparse", "dep:tokio", "dep:quick-xml", "dep:calamine"]
+parse = ["dep:liteparse", "dep:tokio", "dep:quick-xml", "dep:calamine", "liteparse/tesseract"]
 
 [dependencies]
 bzip2 = "0.6.1"
@@ -26,7 +26,7 @@ thiserror = "2.0.18"
 unrar = { version = "0.5.8", optional = true }
 # liteparse: local PDF/DOCX/image parsing via PDFium (no Tesseract by default).
 # Users who want OCR can add `features = ["tesseract"]` in their Cargo.toml.
-liteparse = { version = "2", optional = true, default-features = false }
+liteparse = { version = "2", optional = true }
 # Minimal tokio runtime used to drive the async liteparse API synchronously.
 tokio = { version = "1", optional = true, features = ["rt"] }
 # Pure-Rust XML parser — used to extract text from DOCX and PPTX archives
