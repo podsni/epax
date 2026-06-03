@@ -27,10 +27,37 @@ executable.
 - **Extract-to-folder by default** — `epax extract backup.zip` creates a `backup/`
   directory and extracts inside it (use `-o` for a custom location).
 - **Image squeeze** — re-encode JPEG, PNG and WebP images to any supported
-  format, with quality control and batch directory processing.
+  format, with quality control, batch directory processing and size comparison.
+- **Interactive compress** — guided prompts for files, format and options.
 - **Recursive directory archiving** with relative path preservation.
 - **Unix permission preservation** for `tar` and `zip` (ignored gracefully on
   Windows).
+
+## Quick start
+
+```bash
+# Compress a directory into a zip archive
+epax compress backup.zip ./my-project
+
+# Extract it — auto-creates backup/ folder
+epax extract backup.zip
+
+# Try interactive mode — no arguments needed
+epax compress -i
+
+# Squeeze images to WebP with size comparison
+epax squeeze photo.jpg
+
+# See full details
+epax --help
+```
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [`docs/usage.md`](docs/usage.md) | Full command reference with examples for every operation |
+| [`docs/architecture.md`](docs/architecture.md) | Module layout, data flow, security, and build system |
 
 ## Format support matrix
 
@@ -244,9 +271,8 @@ GitHub Actions. You can also trigger a release manually:
    the repository.
 4. Click **"Run workflow"** to start the build.
 
-The workflow builds Linux x64, macOS arm64, macOS x64, and Windows x64, then
-creates (or updates) the GitHub Release for that tag with all four archives
-attached.
+The workflow builds Linux x64 and Windows x64, then creates (or updates) the
+GitHub Release for that tag with both archives attached.
 
 **Creating a new release tag:**
 
@@ -493,7 +519,14 @@ The suite (`cargo test`) covers:
   single-file `.gz` path; `list` output; RAR extraction from a committed fixture;
   and verification that creating a RAR fails with exit code `2`.
 
-### Project layout
+### Architecture
+
+See [`docs/architecture.md`](docs/architecture.md) for the full architecture
+overview — module tree, data flow diagrams, format detection, stream handling,
+security model, error handling, feature flags, build system, and memory
+characteristics.
+
+Quick reference:
 
 ```
 src/
@@ -502,21 +535,13 @@ src/
   error.rs           EpaxError + exit-code mapping
   format.rs          Format enum, extension detection, tar/suffix logic
   collect.rs         recursive input gathering + archive-name computation
-  ops/               compress / extract / list dispatch by format
-  backends/          per-format implementations
-    zip.rs  sevenz.rs  streamc.rs  tar.rs  rar.rs
+  ops/               compress / extract / list / squeeze dispatch
+  backends/          per-format implementations (zip, 7z, streamc, tar, rar)
   util/path.rs       sanitize_entry_path (zip-slip guard)
-build.rs             links advapi32 on Windows MSVC when the rar feature is on
-tests/
-  roundtrip.rs       end-to-end integration tests
-  fixtures/          sample.rar extraction fixture
-scripts/
-  install.sh         quick-install for Linux / macOS
-  install.ps1        quick-install for Windows PowerShell
-  uninstall.sh       uninstall for Linux / macOS
-  uninstall.ps1      uninstall for Windows PowerShell
-.github/workflows/
-  release.yml        builds all targets and publishes GitHub Release on tag push
+build.rs             links advapi32 on Windows MSVC when rar feature is on
+tests/               integration tests + RAR fixture
+scripts/             install / uninstall scripts for Linux, macOS, Windows
+.github/workflows/   release.yml — builds all targets, publishes GitHub Release
 ```
 
 ---
