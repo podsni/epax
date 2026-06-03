@@ -32,8 +32,13 @@ fn run(cli: Cli) -> Result<()> {
             format,
             level,
             verbose,
+            interactive,
         } => {
-            let actual = ops::compress::run(&output, &inputs, &format, level, verbose)?;
+            let actual = if output.is_none() || interactive {
+                ops::compress::run_interactive(output.as_deref(), &inputs, &format, level, verbose)?
+            } else {
+                ops::compress::run(&output.unwrap(), &inputs, &format, level, verbose)?
+            };
             println!("created {}", actual.display());
         }
         Command::Extract {

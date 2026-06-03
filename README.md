@@ -298,6 +298,55 @@ epax c docs.7z ./docs
 
 # Compress a single file as a bare gzip stream (-> data.csv.gz)
 epax compress data.csv.gz data.csv
+
+# Interactive mode — guided prompts for files, format, and options
+epax compress -i
+epax compress -i ./docs ./assets            # pre-filled inputs, prompts for rest
+epax compress -o out.7z -i ./src            # pre-filled output + inputs
+```
+
+### Interactive compress
+
+Run `epax compress -i` (or `epax c -i`) to enter interactive mode — a step-by-step
+guide that collects inputs, output format, compression level, and output path
+via prompts:
+
+```
+── epax interactive compress ──
+(press Enter on empty line to finish adding files)
+
+  add file/dir: ./src
+  add file/dir: README.md
+  add file/dir: 
+
+  inputs (2):
+    ./src
+    README.md
+  output format [zip]: zst
+  output path [archive.tar.zst]: release.tar.zst
+  compression level (default: format default): 19
+  verbose? (y/n) [n]: y
+
+  ─── summary ───
+  format:  zst
+  output:  release.tar.zst
+  inputs:  2
+  level:   19
+  ───────────────
+
+  proceed? [Y]: Y
+  added  ./src/Cargo.toml
+  added  ./src/main.rs
+  ...
+  created release.tar.zst
+```
+
+You can also pre-fill inputs and/or output path on the command line and let the
+interactive prompts handle the rest:
+
+```bash
+epax compress -i ./docs                # pre-fill docs/, prompts for format/level/output
+epax compress -o backup.zip -i ./src   # pre-fill output + input, prompts for level etc.
 ```
 
 ### Extract

@@ -41,6 +41,9 @@ EXAMPLES:
   epax c report.pdf                             # → report.zip
   epax c notes.txt --format 7z                  # → notes.7z
 
+  # Compress — interactive mode
+  epax compress -i                              # guided step-by-step
+
   # Extract — auto creates folder named after archive
   epax extract backup.zip                       # → backup/* (no -o needed)
   epax x photos.rar -o ./out                    # explicit output dir
@@ -73,11 +76,16 @@ pub enum Command {
     ///   If OUTPUT has no recognized archive extension and --format is not
     ///   given, OUTPUT is treated as an additional input and the output name
     ///   is generated automatically: <stem-of-first-input>.zip
+    ///
+    /// INTERACTIVE MODE
+    ///   Run with -i (or omit OUTPUT entirely) to enter interactive mode,
+    ///   which guides you through choosing files, format, compression level
+    ///   and output path step by step.
     #[command(visible_alias = "c")]
     #[command(after_long_help = COMPRESS_EXAMPLES)]
     Compress {
-        /// Output path (or input when auto-output mode kicks in).
-        output: PathBuf,
+        /// Output path. If omitted (or with -i), enters interactive mode.
+        output: Option<PathBuf>,
         #[arg()]
         inputs: Vec<PathBuf>,
         #[arg(short, long, value_name = "FMT")]
@@ -86,6 +94,9 @@ pub enum Command {
         level: Option<i32>,
         #[arg(short, long)]
         verbose: bool,
+        /// Interactive mode — guide through compression step by step.
+        #[arg(short, long)]
+        interactive: bool,
     },
 
     /// Extract an archive into a directory.
@@ -167,6 +178,11 @@ EXAMPLES:
   epax compress site.tar.gz ./public index.html
   epax c release.tar.zst ./bin -l 19
   epax compress notes.txt --format 7z          # auto-output: notes.7z
+
+  # Interactive mode
+  epax compress -i                            # fully interactive
+  epax compress -i ./docs ./assets            # pre-fill inputs, interactive prompts for rest
+  epax compress -o output.zip -i ./src        # pre-fill output + inputs, prompts for rest
 
   # Single-file bare stream
   epax compress data.csv.gz data.csv";
