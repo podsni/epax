@@ -2,6 +2,14 @@
 
 All notable changes to the `epax` project will be documented in this file.
 
+## [0.5.1] - 2026-06-04
+
+### Added
+- **OCR Integration Test**: Added `test_parse_ocr` to `tests/parse.rs` utilizing ImageMagick `convert` to dynamically verify OCR extraction at test time.
+
+### Fixed
+- **OCR Feature Enablement**: Explicitly enabled the `tesseract` feature on `liteparse` dependency so that the binary is compiled with Tesseract and Leptonica linked statically.
+
 ## [0.5.0] - 2026-06-04
 
 ### Added
