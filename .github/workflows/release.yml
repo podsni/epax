@@ -49,7 +49,10 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: Build release binary
+        env:
+          RUSTFLAGS: ${{ matrix.target == 'x86_64-pc-windows-msvc' && '-C target-feature=+crt-static' || '' }}
         run: cargo build --release --target ${{ matrix.target }}
+
 
       # ── Package ───────────────────────────────────────────────────────────
       - name: Package (Unix)

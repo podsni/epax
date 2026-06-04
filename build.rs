@@ -20,7 +20,8 @@ fn main() {
         println!("cargo:rustc-link-lib=dylib=advapi32");
     }
 
-    if target.contains("windows") && target.contains("msvc") {
+    let target_features = std::env::var("CARGO_CFG_TARGET_FEATURE").unwrap_or_default();
+    if target.contains("windows") && target.contains("msvc") && !target_features.contains("crt-static") {
         println!("cargo:rustc-link-arg=/nodefaultlib:libcmt");
         println!("cargo:rustc-link-arg=/nodefaultlib:libcpmt");
     }
