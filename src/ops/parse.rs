@@ -379,7 +379,7 @@ impl Parsed {
 
 // ── parse a single file ───────────────────────────────────────────────────────
 
-fn parse_file(path: &Path, fmt: &OutFmt, ocr: bool, ocr_engine: &str) -> Result<String> {
+fn parse_file(path: &Path, fmt: &OutFmt, ocr: bool, ocr_engine: &str, ocr_models_dir: Option<&Path>) -> Result<String> {
     let doc_fmt = detect_format(path).ok_or_else(|| {
         EpaxError::Backend(format!(
             "unsupported file type for parse: '{}' — supported: pdf, docx, xlsx, pptx, jpg, png, webp",
@@ -438,12 +438,12 @@ fn parse_file(path: &Path, fmt: &OutFmt, ocr: bool, ocr_engine: &str) -> Result<
             if ocr {
                 match ocr_engine {
                     "ocrs" => {
-                        let engine = OcrsEngine::new()
+                        let engine = OcrsEngine::new(ocr_models_dir)
                             .map_err(EpaxError::Backend)?;
                         parser = parser.with_ocr_engine(Arc::new(engine));
                     }
                     "paddle" => {
-                        let engine = PaddleOcrEngine::new()
+                        let engine = PaddleOcrEngine::new(ocr_models_dir)
                             .map_err(EpaxError::Backend)?;
                         parser = parser.with_ocr_engine(Arc::new(engine));
                     }
@@ -483,6 +483,7 @@ pub fn run(
     format: &str,
     ocr: bool,
     ocr_engine: &str,
+    ocr_models_dir: Option<&Path>,
 ) -> Result<()> {
     let out_fmt = OutFmt::from_str(format)?;
     let multiple = inputs.len() > 1;
@@ -493,7 +494,7 @@ pub fn run(
             return Err(EpaxError::MissingInput(path.clone()));
         }
 
-        let text = parse_file(path, &out_fmt, ocr, ocr_engine)?;
+        let text = parse_file(path, &out_fmt, ocr, ocr_engine, ocr_models_dir)?;
 
         if !buf.is_empty() {
             buf.push('\n');
@@ -644,16 +645,94 @@ pub fn inspect(input: &Path) -> Result<()> {
 static DET_MODEL_BYTES: &[u8] = include_bytes!("../../models/text-detection.rten");
 static REC_MODEL_BYTES: &[u8] = include_bytes!("../../models/text-recognition.rten");
 
+fn dirs_data() -> Option<std::path::PathBuf> {
+    #[cfg(unix)]
+    {
+        std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".local/share/epax"))
+    }
+    #[cfg(windows)]
+    {
+        std::env::var_os("LOCALAPPDATA").map(|a| std::path::PathBuf::from(a).join("epax"))
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        None
+    }
+}
+
+fn resolve_models_dir(custom_dir: Option<&Path>) -> PathBuf {
+    if let Some(dir) = custom_dir {
+        dir.to_path_buf()
+    } else if let Ok(val) = std::env::var("EPAX_OCR_MODELS_DIR") {
+        PathBuf::from(val)
+    } else {
+        let default_base = dirs_data().unwrap_or_else(|| PathBuf::from("."));
+        default_base.join("models")
+    }
+}
+
+fn ensure_model_file(dir: &Path, filename: &str, url: &str) -> std::result::Result<PathBuf, String> {
+    let dest_path = dir.join(filename);
+    if dest_path.exists() {
+        return Ok(dest_path);
+    }
+
+    std::fs::create_dir_all(dir)
+        .map_err(|e| format!("Failed to create models directory {:?}: {}", dir, e))?;
+
+    eprintln!("OCR model file {:?} not found. Downloading from {}...", filename, url);
+
+    let status = std::process::Command::new("curl")
+        .args(["-L", "-o", dest_path.to_str().unwrap(), url])
+        .status()
+        .map_err(|e| format!("failed to execute curl: {}", e))?;
+
+    if !status.success() {
+        return Err(format!("failed to download model from {}", url));
+    }
+
+    Ok(dest_path)
+}
+
 struct OcrsEngine {
     engine: NativeOcrsEngine,
 }
 
 impl OcrsEngine {
-    fn new() -> std::result::Result<Self, String> {
-        let det_model = Model::load_static_slice(DET_MODEL_BYTES)
-            .map_err(|e| format!("Failed to load text detection model: {:?}", e))?;
-        let rec_model = Model::load_static_slice(REC_MODEL_BYTES)
-            .map_err(|e| format!("Failed to load text recognition model: {:?}", e))?;
+    fn new(custom_dir: Option<&Path>) -> std::result::Result<Self, String> {
+        let models_dir = resolve_models_dir(custom_dir);
+
+        let det_path = ensure_model_file(
+            &models_dir,
+            "text-detection.rten",
+            "https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten",
+        );
+
+        let det_model = match det_path {
+            Ok(path) => Model::load_file(path)
+                .map_err(|e| format!("Failed to load text detection model from file: {:?}", e))?,
+            Err(e) => {
+                eprintln!("Warning: could not retrieve detection model from disk/network ({e}). Falling back to embedded model.");
+                Model::load_static_slice(DET_MODEL_BYTES)
+                    .map_err(|err| format!("Failed to load embedded text detection model: {:?}", err))?
+            }
+        };
+
+        let rec_path = ensure_model_file(
+            &models_dir,
+            "text-recognition.rten",
+            "https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten",
+        );
+
+        let rec_model = match rec_path {
+            Ok(path) => Model::load_file(path)
+                .map_err(|e| format!("Failed to load text recognition model from file: {:?}", e))?,
+            Err(e) => {
+                eprintln!("Warning: could not retrieve recognition model from disk/network ({e}). Falling back to embedded model.");
+                Model::load_static_slice(REC_MODEL_BYTES)
+                    .map_err(|err| format!("Failed to load embedded text recognition model: {:?}", err))?
+            }
+        };
 
         let engine = NativeOcrsEngine::new(OcrEngineParams {
             detection_model: Some(det_model),
@@ -732,14 +811,42 @@ struct PaddleOcrEngine {
 }
 
 impl PaddleOcrEngine {
-    fn new() -> std::result::Result<Self, String> {
-        let engine = NativePaddleEngine::from_bytes(
-            PAD_DET_BYTES,
-            PAD_REC_BYTES,
-            PAD_KEYS_BYTES,
-            None,
-        )
-        .map_err(|e| format!("Failed to create PaddleOCR engine: {:?}", e))?;
+    fn new(custom_dir: Option<&Path>) -> std::result::Result<Self, String> {
+        let models_dir = resolve_models_dir(custom_dir);
+
+        let det_res = ensure_model_file(
+            &models_dir,
+            "PP-OCRv5_mobile_det_fp16.mnn",
+            "https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/PP-OCRv5_mobile_det_fp16.mnn",
+        );
+        let rec_res = ensure_model_file(
+            &models_dir,
+            "PP-OCRv5_mobile_rec_fp16.mnn",
+            "https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/PP-OCRv5_mobile_rec_fp16.mnn",
+        );
+        let keys_res = ensure_model_file(
+            &models_dir,
+            "ppocr_keys_v5.txt",
+            "https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/ppocr_keys_v5.txt",
+        );
+
+        let engine = match (det_res, rec_res, keys_res) {
+            (Ok(det_path), Ok(rec_path), Ok(keys_path)) => {
+                NativePaddleEngine::new(det_path, rec_path, keys_path, None)
+                    .map_err(|e| format!("Failed to create PaddleOCR engine from files: {:?}", e))?
+            }
+            _ => {
+                eprintln!("Warning: could not retrieve PaddleOCR models from disk/network. Falling back to embedded models.");
+                NativePaddleEngine::from_bytes(
+                    PAD_DET_BYTES,
+                    PAD_REC_BYTES,
+                    PAD_KEYS_BYTES,
+                    None,
+                )
+                .map_err(|e| format!("Failed to create PaddleOCR engine from embedded bytes: {:?}", e))?
+            }
+        };
+
         Ok(Self {
             engine: Mutex::new(engine),
         })

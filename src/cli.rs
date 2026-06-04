@@ -216,6 +216,10 @@ pub enum Command {
         /// OCR engine: tesseract (default), ocrs (native Rust), or paddle (native Rust PaddleOCR).
         #[arg(long, default_value = "tesseract", value_name = "ENGINE")]
         ocr_engine: String,
+
+        /// Custom directory to load/download OCR models (defaults: ~/.local/share/epax/models on Linux, %LOCALAPPDATA%/epax/models on Windows).
+        #[arg(long, value_name = "DIR")]
+        ocr_models_dir: Option<PathBuf>,
     },
 
     /// Show document metadata: page count, text-item counts per page.

@@ -494,6 +494,17 @@ Extract text from PDF, DOCX, XLSX, PPTX, and image files natively and offline. M
 | `-f, --format <FMT>` | Output format: `text` (default), `md` (markdown), or `json` |
 | `--ocr` | Enable OCR for scanned pages or images |
 | `--ocr-engine <ENGINE>` | Choose OCR engine: `tesseract` (default), `ocrs` (pure Rust ML), or `paddle` (PaddleOCR ML) |
+| `--ocr-models-dir <DIR>` | Custom directory to load/download OCR model weights |
+
+#### OCR Model Locations
+
+When using the native engines (`ocrs` or `paddle`), epax automatically checks for or downloads the required model files on disk:
+- **Default Location**:
+  - **Linux / macOS**: `~/.local/share/epax/models/`
+  - **Windows**: `%LOCALAPPDATA%\epax\models\` (e.g., `C:\Users\<User>\AppData\Local\epax\models\`)
+- **Custom Location**: Can be specified using the `--ocr-models-dir <DIR>` flag or the `EPAX_OCR_MODELS_DIR` environment variable.
+- **Offline / Standalone Fallback**: If the models are not found in the custom or default folders and there is no internet connection to download them, the engine falls back to using the model weights embedded directly inside the compiled binary at build time.
+
 
 ```bash
 # Parse a PDF to stdout

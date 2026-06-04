@@ -85,8 +85,9 @@ fn run(cli: Cli) -> Result<()> {
             format,
             ocr,
             ocr_engine,
+            ocr_models_dir,
         } => {
-            ops::parse::run(&inputs, output.as_deref(), &format, ocr, &ocr_engine)?;
+            ops::parse::run(&inputs, output.as_deref(), &format, ocr, &ocr_engine, ocr_models_dir.as_deref())?;
         }
         #[cfg(feature = "parse")]
         Command::Inspect { input } => {
