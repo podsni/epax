@@ -447,7 +447,16 @@ fn parse_file(path: &Path, fmt: &OutFmt, ocr: bool, ocr_engine: &str, ocr_models
                             .map_err(EpaxError::Backend)?;
                         parser = parser.with_ocr_engine(Arc::new(engine));
                     }
-                    _ => {} // default to tesseract
+                    "tesseract" | _ => {
+                        #[cfg(windows)]
+                        {
+                            return Err(EpaxError::Backend(
+                                "Tesseract OCR engine is not supported on Windows. Please use '--ocr-engine ocrs' or '--ocr-engine paddle' instead.".to_string()
+                            ));
+                        }
+                        #[cfg(not(windows))]
+                        {} // default to tesseract
+                    }
                 }
             }
 

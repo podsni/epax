@@ -19,7 +19,6 @@ parse = [
     "dep:tokio",
     "dep:quick-xml",
     "dep:calamine",
-    "liteparse/tesseract",
     "dep:ocrs",
     "dep:rten",
     "dep:ocr-rs",
@@ -33,9 +32,7 @@ sevenz-rust2 = "0.21.0"
 tar = "0.4.46"
 thiserror = "2.0.18"
 unrar = { version = "0.5.8", optional = true }
-# liteparse: local PDF/DOCX/image parsing via PDFium (no Tesseract by default).
-# Users who want OCR can add `features = ["tesseract"]` in their Cargo.toml.
-liteparse = { version = "2", optional = true }
+
 # Minimal tokio runtime used to drive the async liteparse API synchronously.
 tokio = { version = "1", optional = true, features = ["rt"] }
 # Pure-Rust XML parser — used to extract text from DOCX and PPTX archives
@@ -55,3 +52,9 @@ ocr-rs = { version = "2.2.2", optional = true }
 assert_cmd = "2.2.2"
 predicates = "3.1.4"
 tempfile = "3.27.0"
+
+[target.'cfg(not(windows))'.dependencies]
+liteparse = { version = "2", optional = true, features = ["tesseract"] }
+
+[target.'cfg(windows)'.dependencies]
+liteparse = { version = "2", optional = true }
