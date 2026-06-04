@@ -496,14 +496,90 @@ Extract text from PDF, DOCX, XLSX, PPTX, and image files natively and offline. M
 | `--ocr-engine <ENGINE>` | Choose OCR engine: `tesseract` (default), `ocrs` (pure Rust ML), or `paddle` (PaddleOCR ML) |
 | `--ocr-models-dir <DIR>` | Custom directory to load/download OCR model weights |
 
-#### OCR Model Locations
+#### OCR Model Locations & Custom Downloads
 
-When using the native engines (`ocrs` or `paddle`), epax automatically checks for or downloads the required model files on disk:
-- **Default Location**:
-  - **Linux / macOS**: `~/.local/share/epax/models/`
-  - **Windows**: `%LOCALAPPDATA%\epax\models\` (e.g., `C:\Users\<User>\AppData\Local\epax\models\`)
-- **Custom Location**: Can be specified using the `--ocr-models-dir <DIR>` flag or the `EPAX_OCR_MODELS_DIR` environment variable.
-- **Offline / Standalone Fallback**: If the models are not found in the custom or default folders and there is no internet connection to download them, the engine falls back to using the model weights embedded directly inside the compiled binary at build time.
+When using the native engines (`ocrs` or `paddle`), `epax` dynamically resolves the directory to load OCR model weights.
+
+##### Directory Resolution Order
+1. **Command Line Flag**: Specified via `--ocr-models-dir <DIR>`.
+2. **Environment Variable**: Set via the `EPAX_OCR_MODELS_DIR` environment variable.
+3. **Default System Directory**:
+   - **Linux / macOS**: `~/.local/share/epax/models/`
+   - **Windows**: `%LOCALAPPDATA%\epax\models\` (which typically resolves to `C:\Users\<Username>\AppData\Local\epax\models\`)
+
+##### Automated & Offline Fallback Behavior
+- **Auto-Download**: If models are missing from the resolved directory, `epax` attempts to automatically download them on the fly and save them to the directory.
+- **Embedded Fallback**: If the network is unavailable (offline/air-gapped environment) and the model files are missing from the resolved directory, `epax` automatically falls back to utilizing the model weights statically embedded directly inside the compiled `epax` binary.
+
+---
+
+##### Manual Downloads & Air-Gapped Environments
+For secure or air-gapped environments where `epax` cannot access the internet to download models automatically, you can download the models manually using `curl` or `wget` and place them directly in the target directory (either the default location or your custom path).
+
+###### 1. `ocrs` Engine Models
+Download these two files and place them in your models folder:
+* **Text Detection Model** (`text-detection.rten`):
+  * **Link**: [text-detection.rten](https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten)
+  * **Command**:
+    ```bash
+    curl -L -o text-detection.rten https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten
+    ```
+* **Text Recognition Model** (`text-recognition.rten`):
+  * **Link**: [text-recognition.rten](https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten)
+  * **Command**:
+    ```bash
+    curl -L -o text-recognition.rten https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten
+    ```
+
+###### 2. `paddle` (PaddleOCR v5) Engine Models
+Download these three files and place them in your models folder:
+* **Detection Model** (`PP-OCRv5_mobile_det_fp16.mnn`):
+  * **Link**: [PP-OCRv5_mobile_det_fp16.mnn](https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/PP-OCRv5_mobile_det_fp16.mnn)
+  * **Command**:
+    ```bash
+    curl -L -o PP-OCRv5_mobile_det_fp16.mnn https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/PP-OCRv5_mobile_det_fp16.mnn
+    ```
+* **Recognition Model** (`PP-OCRv5_mobile_rec_fp16.mnn`):
+  * **Link**: [PP-OCRv5_mobile_rec_fp16.mnn](https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/PP-OCRv5_mobile_rec_fp16.mnn)
+  * **Command**:
+    ```bash
+    curl -L -o PP-OCRv5_mobile_rec_fp16.mnn https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/PP-OCRv5_mobile_rec_fp16.mnn
+    ```
+* **Character Dictionary** (`ppocr_keys_v5.txt`):
+  * **Link**: [ppocr_keys_v5.txt](https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/ppocr_keys_v5.txt)
+  * **Command**:
+    ```bash
+    curl -L -o ppocr_keys_v5.txt https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/ppocr_keys_v5.txt
+    ```
+
+###### Setup Example (Linux/macOS)
+```bash
+# Create the default directory
+mkdir -p ~/.local/share/epax/models
+
+# Download all models manually into the default folder
+cd ~/.local/share/epax/models
+curl -L -O https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten
+curl -L -O https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten
+curl -L -O https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/PP-OCRv5_mobile_det_fp16.mnn
+curl -L -O https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/PP-OCRv5_mobile_rec_fp16.mnn
+curl -L -O https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/ppocr_keys_v5.txt
+```
+
+###### Setup Example (Windows PowerShell)
+```powershell
+# Create the default directory
+New-Item -ItemType Directory -Force -Path "$env:LOCALAPPDATA\epax\models"
+
+# Download all models manually into the default folder
+Set-Location -Path "$env:LOCALAPPDATA\epax\models"
+Invoke-WebRequest -Uri "https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten" -OutFile "text-detection.rten"
+Invoke-WebRequest -Uri "https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten" -OutFile "text-recognition.rten"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/PP-OCRv5_mobile_det_fp16.mnn" -OutFile "PP-OCRv5_mobile_det_fp16.mnn"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/PP-OCRv5_mobile_rec_fp16.mnn" -OutFile "PP-OCRv5_mobile_rec_fp16.mnn"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/ppocr_keys_v5.txt" -OutFile "ppocr_keys_v5.txt"
+```
+
 
 
 ```bash

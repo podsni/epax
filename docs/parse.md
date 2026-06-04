@@ -185,15 +185,84 @@ This builds the all-Rust core: `compress`, `extract`, `list`, and `squeeze`.
 > **MinGW / Windows GNU** targets are not officially supported by liteparse-pdfium.
 > Use `--no-default-features` on MinGW, or switch to MSVC.
 
-### OCR (optional)
+### OCR (Optional but Built-in)
 
-OCR is disabled by default. When `--ocr` is passed, liteparse calls Tesseract.
-To use it:
+OCR is disabled by default. When `--ocr` is passed, you can choose between three different OCR engines:
+1. **`tesseract`** (Default): Classic, high-accuracy external OCR engine. Requires `tesseract` binary to be installed on your system.
+2. **`ocrs`**: Pure-Rust neural-network-based OCR engine running natively in-process. Requires no external dependencies.
+3. **`paddle`**: High-performance layout-aware OCR engine running natively in-process via MNN runtime (via `ocr-rs` wrapper).
 
-1. Install Tesseract: `sudo apt install tesseract-ocr` (Linux) or download from
-   [tesseract-ocr/tesseract](https://github.com/tesseract-ocr/tesseract/releases) (Windows).
-2. Ensure `tesseract` is on your `PATH`.
-3. Run: `epax parse scan.pdf --ocr`
+To run OCR:
+```bash
+# Use default Tesseract (requires tesseract system binary)
+epax parse scan.pdf --ocr
 
-For other languages add `--ocr-lang <code>` (not yet exposed in the CLI; set
-`TESSDATA_PREFIX` or use the JSON API directly).
+# Use pure-Rust in-process engine
+epax parse scan.pdf --ocr --ocr-engine ocrs
+
+# Use PaddleOCR in-process engine
+epax parse scan.pdf --ocr --ocr-engine paddle
+```
+
+---
+
+### OCR Model Locations & Custom Downloads
+
+When using the native engines (`ocrs` or `paddle`), `epax` dynamically resolves where to load/save model weights.
+
+#### Directory Resolution Order
+1. **Command Line Flag**: `--ocr-models-dir <DIR>`
+2. **Environment Variable**: `EPAX_OCR_MODELS_DIR`
+3. **Default System Directory**:
+   - **Linux / macOS**: `~/.local/share/epax/models/`
+   - **Windows**: `%LOCALAPPDATA%\epax\models\` (resolves to `C:\Users\<Username>\AppData\Local\epax\models\`)
+
+If models are missing from the resolved directory, `epax` will automatically attempt to download them. If there is no internet connection, it automatically falls back to utilizing the model weights statically embedded directly inside the compiled binary.
+
+---
+
+### Manual Downloads & Air-Gapped Setup
+
+In air-gapped environments or restricted networks, download the weights manually and place them in the models folder.
+
+#### 1. `ocrs` Engine Models
+* **Text Detection Model** (`text-detection.rten`):
+  * **Link**: [text-detection.rten](https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten)
+  * **Download**: `curl -L -o text-detection.rten https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten`
+* **Text Recognition Model** (`text-recognition.rten`):
+  * **Link**: [text-recognition.rten](https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten)
+  * **Download**: `curl -L -o text-recognition.rten https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten`
+
+#### 2. `paddle` Engine Models
+* **Detection Model** (`PP-OCRv5_mobile_det_fp16.mnn`):
+  * **Link**: [PP-OCRv5_mobile_det_fp16.mnn](https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/PP-OCRv5_mobile_det_fp16.mnn)
+  * **Download**: `curl -L -o PP-OCRv5_mobile_det_fp16.mnn https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/PP-OCRv5_mobile_det_fp16.mnn`
+* **Recognition Model** (`PP-OCRv5_mobile_rec_fp16.mnn`):
+  * **Link**: [PP-OCRv5_mobile_rec_fp16.mnn](https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/PP-OCRv5_mobile_rec_fp16.mnn)
+  * **Download**: `curl -L -o PP-OCRv5_mobile_rec_fp16.mnn https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/PP-OCRv5_mobile_rec_fp16.mnn`
+* **Character Keys Map** (`ppocr_keys_v5.txt`):
+  * **Link**: [ppocr_keys_v5.txt](https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/ppocr_keys_v5.txt)
+  * **Download**: `curl -L -o ppocr_keys_v5.txt https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/ppocr_keys_v5.txt`
+
+#### Quick Setup Example (Linux/macOS)
+```bash
+mkdir -p ~/.local/share/epax/models
+cd ~/.local/share/epax/models
+curl -L -O https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten
+curl -L -O https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten
+curl -L -O https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/PP-OCRv5_mobile_det_fp16.mnn
+curl -L -O https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/PP-OCRv5_mobile_rec_fp16.mnn
+curl -L -O https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/ppocr_keys_v5.txt
+```
+
+#### Quick Setup Example (Windows PowerShell)
+```powershell
+New-Item -ItemType Directory -Force -Path "$env:LOCALAPPDATA\epax\models"
+Set-Location -Path "$env:LOCALAPPDATA\epax\models"
+Invoke-WebRequest -Uri "https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten" -OutFile "text-detection.rten"
+Invoke-WebRequest -Uri "https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten" -OutFile "text-recognition.rten"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/PP-OCRv5_mobile_det_fp16.mnn" -OutFile "PP-OCRv5_mobile_det_fp16.mnn"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/PP-OCRv5_mobile_rec_fp16.mnn" -OutFile "PP-OCRv5_mobile_rec_fp16.mnn"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/zibo-chen/rust-paddle-ocr/next/models/ppocr_keys_v5.txt" -OutFile "ppocr_keys_v5.txt"
+```
+

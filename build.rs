@@ -20,6 +20,11 @@ fn main() {
         println!("cargo:rustc-link-lib=dylib=advapi32");
     }
 
+    if target.contains("windows") && target.contains("msvc") {
+        println!("cargo:rustc-link-arg=/nodefaultlib:libcmt");
+        println!("cargo:rustc-link-arg=/nodefaultlib:libcpmt");
+    }
+
     let parse = std::env::var("CARGO_FEATURE_PARSE").is_ok();
     if parse {
         // Ensure models directory exists
