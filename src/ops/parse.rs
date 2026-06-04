@@ -21,7 +21,15 @@
 //! | `md`        | `.md`     | Markdown with `## Page N` / `## Sheet N`      |
 //! | `json`      | `.json`   | JSON (PDF: liteparse native; others: simple)  |
 
+use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
+
+use liteparse::ocr::{OcrEngine, OcrOptions, OcrResult};
+use ocrs::{OcrEngine as NativeOcrsEngine, OcrEngineParams, ImageSource, TextItem};
+use rten::Model;
+use ocr_rs::OcrEngine as NativePaddleEngine;
 
 use crate::error::{EpaxError, Result};
 
@@ -371,7 +379,7 @@ impl Parsed {
 
 // ── parse a single file ───────────────────────────────────────────────────────
 
-fn parse_file(path: &Path, fmt: &OutFmt, ocr: bool) -> Result<String> {
+fn parse_file(path: &Path, fmt: &OutFmt, ocr: bool, ocr_engine: &str) -> Result<String> {
     let doc_fmt = detect_format(path).ok_or_else(|| {
         EpaxError::Backend(format!(
             "unsupported file type for parse: '{}' — supported: pdf, docx, xlsx, pptx, jpg, png, webp",
@@ -425,7 +433,24 @@ fn parse_file(path: &Path, fmt: &OutFmt, ocr: bool) -> Result<String> {
                 output_format: lp_fmt,
                 ..Default::default()
             };
-            let parser = LiteParse::new(config);
+            let mut parser = LiteParse::new(config);
+
+            if ocr {
+                match ocr_engine {
+                    "ocrs" => {
+                        let engine = OcrsEngine::new()
+                            .map_err(EpaxError::Backend)?;
+                        parser = parser.with_ocr_engine(Arc::new(engine));
+                    }
+                    "paddle" => {
+                        let engine = PaddleOcrEngine::new()
+                            .map_err(EpaxError::Backend)?;
+                        parser = parser.with_ocr_engine(Arc::new(engine));
+                    }
+                    _ => {} // default to tesseract
+                }
+            }
+
             let rt = make_rt()?;
 
             let result = rt
@@ -457,6 +482,7 @@ pub fn run(
     output: Option<&Path>,
     format: &str,
     ocr: bool,
+    ocr_engine: &str,
 ) -> Result<()> {
     let out_fmt = OutFmt::from_str(format)?;
     let multiple = inputs.len() > 1;
@@ -467,7 +493,7 @@ pub fn run(
             return Err(EpaxError::MissingInput(path.clone()));
         }
 
-        let text = parse_file(path, &out_fmt, ocr)?;
+        let text = parse_file(path, &out_fmt, ocr, ocr_engine)?;
 
         if !buf.is_empty() {
             buf.push('\n');
@@ -611,4 +637,168 @@ pub fn inspect(input: &Path) -> Result<()> {
     }
 
     Ok(())
+}
+
+// ── OcrsEngine (native Rust) ──────────────────────────────────────────────────
+
+static DET_MODEL_BYTES: &[u8] = include_bytes!("../../models/text-detection.rten");
+static REC_MODEL_BYTES: &[u8] = include_bytes!("../../models/text-recognition.rten");
+
+struct OcrsEngine {
+    engine: NativeOcrsEngine,
+}
+
+impl OcrsEngine {
+    fn new() -> std::result::Result<Self, String> {
+        let det_model = Model::load_static_slice(DET_MODEL_BYTES)
+            .map_err(|e| format!("Failed to load text detection model: {:?}", e))?;
+        let rec_model = Model::load_static_slice(REC_MODEL_BYTES)
+            .map_err(|e| format!("Failed to load text recognition model: {:?}", e))?;
+
+        let engine = NativeOcrsEngine::new(OcrEngineParams {
+            detection_model: Some(det_model),
+            recognition_model: Some(rec_model),
+            ..Default::default()
+        })
+        .map_err(|e| format!("Failed to create ocrs engine: {:?}", e))?;
+
+        Ok(Self { engine })
+    }
+}
+
+impl OcrEngine for OcrsEngine {
+    fn name(&self) -> &str {
+        "ocrs"
+    }
+
+    fn recognize<'a, 'b: 'a, 'c: 'a>(
+        &'a self,
+        image_data: &'c [u8],
+        width: u32,
+        height: u32,
+        _options: &'b OcrOptions,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = std::result::Result<Vec<OcrResult>, Box<dyn std::error::Error + Send + Sync>>>
+                + Send
+                + '_,
+        >,
+    > {
+        Box::pin(async move {
+            let img_source = ImageSource::from_bytes(image_data, (width, height))
+                .map_err(|e| Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("ImageSource error: {:?}", e))) as Box<dyn std::error::Error + Send + Sync>)?;
+
+            let ocr_input = self.engine.prepare_input(img_source)
+                .map_err(|e| Box::new(std::io::Error::other(format!("prepare_input error: {:?}", e))) as Box<dyn std::error::Error + Send + Sync>)?;
+
+            let word_rects = self.engine.detect_words(&ocr_input)
+                .map_err(|e| Box::new(std::io::Error::other(format!("detect_words error: {:?}", e))) as Box<dyn std::error::Error + Send + Sync>)?;
+
+            let line_rects = self.engine.find_text_lines(&ocr_input, &word_rects);
+
+            let lines = self.engine.recognize_text(&ocr_input, &line_rects)
+                .map_err(|e| Box::new(std::io::Error::other(format!("recognize_text error: {:?}", e))) as Box<dyn std::error::Error + Send + Sync>)?;
+
+            let mut results = Vec::new();
+            for line in lines.into_iter().flatten() {
+                for word in line.words() {
+                    let rect = word.bounding_rect();
+                    let left = rect.left() as f32;
+                    let top = rect.top() as f32;
+                    let right = rect.right() as f32;
+                    let bottom = rect.bottom() as f32;
+
+                    results.push(OcrResult {
+                        text: word.to_string(),
+                        bbox: [left, top, right, bottom],
+                        confidence: 1.0,
+                    });
+                }
+            }
+
+            Ok(results)
+        })
+    }
+}
+
+// ── PaddleOcrEngine (native Rust / MNN) ───────────────────────────────────────
+
+static PAD_DET_BYTES: &[u8] = include_bytes!("../../models/PP-OCRv5_mobile_det_fp16.mnn");
+static PAD_REC_BYTES: &[u8] = include_bytes!("../../models/PP-OCRv5_mobile_rec_fp16.mnn");
+static PAD_KEYS_BYTES: &[u8] = include_bytes!("../../models/ppocr_keys_v5.txt");
+
+struct PaddleOcrEngine {
+    engine: Mutex<NativePaddleEngine>,
+}
+
+impl PaddleOcrEngine {
+    fn new() -> std::result::Result<Self, String> {
+        let engine = NativePaddleEngine::from_bytes(
+            PAD_DET_BYTES,
+            PAD_REC_BYTES,
+            PAD_KEYS_BYTES,
+            None,
+        )
+        .map_err(|e| format!("Failed to create PaddleOCR engine: {:?}", e))?;
+        Ok(Self {
+            engine: Mutex::new(engine),
+        })
+    }
+}
+
+impl OcrEngine for PaddleOcrEngine {
+    fn name(&self) -> &str {
+        "paddle"
+    }
+
+    fn recognize<'a, 'b: 'a, 'c: 'a>(
+        &'a self,
+        image_data: &'c [u8],
+        width: u32,
+        height: u32,
+        _options: &'b OcrOptions,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = std::result::Result<Vec<OcrResult>, Box<dyn std::error::Error + Send + Sync>>>
+                + Send
+                + '_,
+        >,
+    > {
+        Box::pin(async move {
+            let engine = self.engine.lock().map_err(|e| {
+                Box::new(std::io::Error::other(
+                    format!("Mutex lock failed: {}", e),
+                )) as Box<dyn std::error::Error + Send + Sync>
+            })?;
+
+            let rgb_img = image::ImageBuffer::<image::Rgb<u8>, _>::from_raw(width, height, image_data.to_vec())
+                .ok_or_else(|| {
+                    Box::new(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "Failed to create ImageBuffer from raw RGB bytes",
+                    )) as Box<dyn std::error::Error + Send + Sync>
+                })?;
+            let dyn_img = image::DynamicImage::ImageRgb8(rgb_img);
+
+            let native_results = engine.recognize(&dyn_img)
+                .map_err(|e| Box::new(std::io::Error::other(format!("PaddleOCR recognize error: {:?}", e))) as Box<dyn std::error::Error + Send + Sync>)?;
+
+            let results: Vec<OcrResult> = native_results
+                .into_iter()
+                .map(|r| {
+                    let left = r.bbox.rect.left() as f32;
+                    let top = r.bbox.rect.top() as f32;
+                    let right = left + r.bbox.rect.width() as f32;
+                    let bottom = top + r.bbox.rect.height() as f32;
+                    OcrResult {
+                        text: r.text,
+                        bbox: [left, top, right, bottom],
+                        confidence: r.confidence,
+                    }
+                })
+                .collect();
+
+            Ok(results)
+        })
+    }
 }

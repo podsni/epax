@@ -32,6 +32,13 @@ executable.
 - **Recursive directory archiving** with relative path preservation.
 - **Unix permission preservation** for `tar` and `zip` (ignored gracefully on
   Windows).
+- **Document Text Extraction (`parse`)** — extract text from PDF, DOCX, XLSX, PPTX,
+  and images locally without requiring external tools (like LibreOffice or MS Office).
+- **In-Process Multi-Engine OCR** — offline OCR using `tesseract` (default), `ocrs` (pure
+  Rust), or `paddle` (PaddleOCR via `ocr-rs` using MNN). All model weights are
+  embedded directly into the binary at compile time for 100% standalone execution.
+- **Document Metadata Inspector (`inspect`)** — inspect page counts, character counts, word counts,
+  and text density breakdown with a terminal bar chart.
 
 ## Quick start
 
@@ -295,6 +302,8 @@ Commands:
   extract   Extract an archive into a directory                            [aliases: x, e]
   list      List the contents of an archive without extracting             [aliases: l, ls]
   squeeze   Compress images — convert between WebP, JPEG, and PNG
+  parse     Extract text from document (PDF, DOCX, XLSX, PPTX, image)
+  inspect   Show document structural metadata / breakdown                  [alias: info]
   update    Update epax to the latest release from GitHub
   uninstall Uninstall epax from this system
   help      Print this message or the help of the given subcommand(s)
@@ -470,6 +479,63 @@ After processing, epax shows a size comparison for each image and a total:
 **Note:** WebP output uses lossless encoding (quality flag is accepted but
 currently ignored for WebP). JPEG output respects `--quality`. PNG is always
 lossless.
+
+### Parse (document text extraction)
+
+```bash
+epax parse <INPUTS>... [-o <FILE>] [-f text|md|json] [--ocr] [--ocr-engine tesseract|ocrs|paddle]
+```
+
+Extract text from PDF, DOCX, XLSX, PPTX, and image files natively and offline. Multiple files can be passed and their outputs will be concatenated.
+
+| Option | Description |
+|---|---|
+| `-o, --output <FILE>` | Save text output to a file instead of stdout (automatically saved to `parsed.<ext>` for multiple inputs) |
+| `-f, --format <FMT>` | Output format: `text` (default), `md` (markdown), or `json` |
+| `--ocr` | Enable OCR for scanned pages or images |
+| `--ocr-engine <ENGINE>` | Choose OCR engine: `tesseract` (default), `ocrs` (pure Rust ML), or `paddle` (PaddleOCR ML) |
+
+```bash
+# Parse a PDF to stdout
+epax parse report.pdf
+
+# Parse a Word document and save as Markdown
+epax parse document.docx -o document.md -f md
+
+# Parse a spreadsheet (each worksheet is separated into sections)
+epax parse data.xlsx
+
+# Run offline OCR on a scanned image using the pure Rust engine
+epax parse scanned_page.jpg --ocr --ocr-engine ocrs
+
+# Run offline OCR using the PaddleOCR engine
+epax parse scan.png --ocr --ocr-engine paddle
+```
+
+### Inspect (document metadata)
+
+```bash
+epax inspect <INPUT>
+# alias: epax info <INPUT>
+```
+
+Print structural metadata for a document, including page counts, character counts, and text-density bar charts per page.
+
+```bash
+epax inspect document.pdf
+```
+```text
+file       : document.pdf
+format     : PDF (PDFium)
+pages      : 3
+text items : 485
+characters : 3820
+
+per-page breakdown:
+  page 1     240 items  ████████████████████████████████████████
+  page 2     180 items  ██████████████████████████████
+  page 3      65 items  ██████████
+```
 
 ---
 

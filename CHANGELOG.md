@@ -2,6 +2,16 @@
 
 All notable changes to the `epax` project will be documented in this file.
 
+## [0.5.2] - 2026-06-04
+
+### Added
+- **Multi-Engine Native Rust OCR Support**: Added `--ocr-engine` CLI flag to choose between:
+  - `tesseract` (statically linked, default)
+  - `ocrs` (pure-Rust OCR engine)
+  - `paddle` (PaddleOCR via `ocr-rs` using MNN runtime)
+- **Automatic Model Downloads**: Programmed `build.rs` to automatically download ML model files (`.rten`, `.mnn`, and `.txt` keys) if they are missing locally.
+- **Embedded Inference Models**: Embedded model bytes directly inside the executable via `include_bytes!`, allowing offline, in-process OCR on both Linux and Windows with 0 external runtimes or library installations.
+
 ## [0.5.1] - 2026-06-04
 
 ### Added

@@ -212,6 +212,10 @@ pub enum Command {
         /// Enable OCR for scanned pages (requires Tesseract on PATH).
         #[arg(long)]
         ocr: bool,
+
+        /// OCR engine: tesseract (default), ocrs (native Rust), or paddle (native Rust PaddleOCR).
+        #[arg(long, default_value = "tesseract", value_name = "ENGINE")]
+        ocr_engine: String,
     },
 
     /// Show document metadata: page count, text-item counts per page.

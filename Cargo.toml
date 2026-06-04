@@ -1,6 +1,6 @@
 [package]
 name = "epax"
-version = "0.5.1"
+version = "0.5.2"
 edition = "2024"
 
 [features]
@@ -14,7 +14,16 @@ edition = "2024"
 # Tesseract). Disable with `--no-default-features` for a pure-Rust binary.
 default = ["rar", "parse"]
 rar = ["dep:unrar"]
-parse = ["dep:liteparse", "dep:tokio", "dep:quick-xml", "dep:calamine", "liteparse/tesseract"]
+parse = [
+    "dep:liteparse",
+    "dep:tokio",
+    "dep:quick-xml",
+    "dep:calamine",
+    "liteparse/tesseract",
+    "dep:ocrs",
+    "dep:rten",
+    "dep:ocr-rs",
+]
 
 [dependencies]
 bzip2 = "0.6.1"
@@ -38,6 +47,9 @@ walkdir = "2.5.0"
 zip = "8.6.0"
 zstd = "0.13.3"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+ocrs = { version = "0.12.2", optional = true }
+rten = { version = "0.24.0", optional = true }
+ocr-rs = { version = "2.2.2", optional = true }
 
 [dev-dependencies]
 assert_cmd = "2.2.2"
