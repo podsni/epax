@@ -57,4 +57,4 @@ tempfile = "3.27.0"
 liteparse = { version = "2", optional = true, features = ["tesseract"] }
 
 [target.'cfg(windows)'.dependencies]
-liteparse = { version = "2", optional = true }
+liteparse = { version = "2", optional = true, default-features = false }
